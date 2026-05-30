@@ -615,6 +615,7 @@ burden_inapp
 
 table(dt_desc$dataset, dt_desc$total_inapp_shock)
 
+study3_add_inapp_shock_event(dt_analysis)
 
 saveRDS(
   dt_analysis,

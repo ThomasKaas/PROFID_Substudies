@@ -11,8 +11,9 @@ library(survival)
 #install.packages("mice")
 
 dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
+study3_add_inapp_shock_event(dt_final)
 
-#  Quick inventory / missingness / coding 
+#  Quick inventory / missingness / coding
 # -----------------------------
 vars_check <- c(
   "age_icd","Sex","BMI","eGFR","LVEF","Diabetes","AF_atrial_flutter","NYHA","Smoking",

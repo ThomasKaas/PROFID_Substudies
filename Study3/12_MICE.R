@@ -19,6 +19,7 @@ library (mice)
 
 
 dt <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
+study3_add_inapp_shock_event(dt)
 
 
 # Exposure

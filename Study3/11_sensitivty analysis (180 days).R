@@ -14,6 +14,7 @@ dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
 dir.create(study3_output_root(), recursive = TRUE, showWarnings = FALSE)
 
 dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
+study3_add_inapp_shock_event(dt_final)
 
 #  6-month filter (SAP)
 min_fu_days <- 180

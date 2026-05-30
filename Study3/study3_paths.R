@@ -257,6 +257,42 @@ study3_file_ready <- function(file) {
   is.finite(size) && !is.na(size) && size > 0
 }
 
+study3_add_inapp_shock_event <- function(dt) {
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("Package 'data.table' is required to derive event_inapp_shock.", call. = FALSE)
+  }
+  data.table::setDT(dt)
+
+  required <- c("inapp_shock_flag", "t_followup_days_final")
+  missing <- setdiff(required, names(dt))
+  if (length(missing)) {
+    stop(
+      sprintf("Cannot derive event_inapp_shock; missing column(s): %s",
+              paste(missing, collapse = ", ")),
+      call. = FALSE
+    )
+  }
+
+  dt[, inapp_shock_flag_std := tolower(trimws(as.character(inapp_shock_flag)))]
+  dt[, event_inapp_shock := data.table::fifelse(
+    inapp_shock_flag_std == "yes",
+    1L,
+    0L,
+    na = 0L
+  )]
+
+  if ("days_to_inapp_shock" %in% names(dt)) {
+    dt[
+      event_inapp_shock == 1 &
+        !is.na(days_to_inapp_shock) &
+        days_to_inapp_shock > t_followup_days_final,
+      days_to_inapp_shock := t_followup_days_final
+    ]
+  }
+
+  invisible(dt)
+}
+
 study3_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300) {
   dir.create(dirname(png_file), recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)

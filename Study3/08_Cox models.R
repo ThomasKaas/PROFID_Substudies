@@ -38,32 +38,13 @@ dt[
 ]
 
 #################### 3. HARMONISE INAPPROPRIATE SHOCK FLAG ####################
-# Raw values:
-# EUCERT: yes / no / NA
-# HELIOS, PROSE: Yes / No
-# ISRAEL: YES / NO / UNKNOWN
-
-dt[, inapp_shock_flag_std :=
-     tolower(trimws(as.character(inapp_shock_flag)))]
-
 #################### 4. DEFINE EVENT INDICATOR ####################
-# YES = 1
-# NO / UNKNOWN / NA = 0
+# YES = 1; NO / UNKNOWN / NA = 0
 
-dt[, event_inapp_shock :=
-     fifelse(inapp_shock_flag_std == "yes", 1L, 0L, na = 0L)
-]
+study3_add_inapp_shock_event(dt)
 
 # QC
 dt[, .N, by = .(dataset, event_inapp_shock)]
-
-
-dt[
-  event_inapp_shock == 1 &
-    !is.na(days_to_inapp_shock) &
-    days_to_inapp_shock > t_followup_days_final,
-  days_to_inapp_shock := t_followup_days_final
-]
 
 ########## REMOVE INVALID FOLLOW-UP ##########
 # (No time at risk)

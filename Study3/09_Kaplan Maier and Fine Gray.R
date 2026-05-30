@@ -16,7 +16,8 @@ library(survival)
 library(readxl)
 library (mice)
 
-dt_final <- readRDS(study3_derived_path("study3_analysis_final.rds"))
+dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
+study3_add_inapp_shock_event(dt_final)
 
 km_fit <- survfit(
   Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
@@ -54,9 +55,6 @@ summary(dt_final[event_inapp_shock == 1, t_followup_days_final])
 
 names(dt_final)
 
-
-dt_final <- readRDS(study3_derived_path("study3_analysis_final.rds"))
-dt_final <- as.data.table(dt_final)
 
 # Fine–Gray event variable
 # 0 = censored
