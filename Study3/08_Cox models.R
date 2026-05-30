@@ -2,12 +2,17 @@
 
 # install.packages("survival")
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(survival)
 
 
 #################### 1. LOAD DATA ####################
-dt <- readRDS("study3_analysis_cohort_v2_final_followup.rds")
+dt <- readRDS(study3_derived_path("study3_analysis_cohort_v2_final_followup.rds"))
 
 #################### 2. HARMONISE ICD TYPE → DEVICE GROUP ####################
 dt[, .N, by = .(dataset, device_group)][order(dataset, device_group)]

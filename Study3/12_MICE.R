@@ -6,6 +6,11 @@
 # install.packages("readxl")
 # install.packages ("mice")
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(cmprsk)
 library(survival)
@@ -13,7 +18,7 @@ library(readxl)
 library (mice)
 
 
-dt <- as.data.table(readRDS("study3_analysis_final.rds"))
+dt <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 
 
 # Exposure

@@ -10,6 +10,10 @@ rm(list = ls())
 # ))
 
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
 
 library(data.table)
 library(readxl)
@@ -17,15 +21,15 @@ library(stringr)
 
 ###################### 1. LOAD CLEANED EVENT DATASETS ######################
 
-dt_helios <- readRDS("helios_events_clean.rds")
-dt_eucert <- readRDS("eucert_events_clean.rds")
-dt_israel <- readRDS("israel_events_clean.rds")
-dt_prose  <- readRDS("prose_events_clean.rds")
-dt_lcv    <- readRDS("lcv_events_clean.rds")
+dt_helios <- readRDS(study3_derived_path("helios_events_clean.rds"))
+dt_eucert <- readRDS(study3_derived_path("eucert_events_clean.rds"))
+dt_israel <- readRDS(study3_derived_path("israel_events_clean.rds"))
+dt_prose  <- readRDS(study3_derived_path("prose_events_clean.rds"))
+dt_lcv    <- readRDS(study3_derived_path("lcv_events_clean.rds"))
 
 ###################### 2. LOAD BASELINE STACKED ICD DATASET ######################
 
-dt_icd <- fread("ICD.csv")   
+dt_icd <- fread(profid_transfer_path("ICD.csv"))
 
 helios_icd  <- sum(startsWith(dt_icd$ID, "HELS_"), na.rm = TRUE)
 eucert_icd  <- sum(startsWith(dt_icd$ID, "CERT_"), na.rm = TRUE)
@@ -180,7 +184,7 @@ table(dt_final_study3$dataset)
 
 ###################### REMOVE LCV–PROSE DUPLICATES ######################
 
-dup_map <- fread("PROSE_LCVcommon participant.csv")
+dup_map <- fread(study3_raw_path("PROSE_LCVcommon participant.csv"))
 setnames(dup_map, c("PROSE_ID","LCV_ID"))
 
 dt_final_study3 <- dt_final_study3[
@@ -192,8 +196,9 @@ table(dt_final_study3$dataset)
 
 ###################### 9. SAVE FINAL DATASET ######################
 
-saveRDS(dt_final_study3, "study3_final_merged.rds")
-fwrite(dt_final_study3, "study3_final_merged.csv")
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+saveRDS(dt_final_study3, study3_derived_path("study3_final_merged.rds"))
+fwrite(dt_final_study3, study3_derived_path("study3_final_merged.csv"))
 
 
 with(

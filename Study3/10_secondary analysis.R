@@ -1,11 +1,16 @@
 
 ###########################SECONDARY ANALYSIS ####################################################
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(survival)
 #install.packages("mice")
 
-dt_final <- as.data.table(readRDS("study3_analysis_final.rds"))
+dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 
 #  Quick inventory / missingness / coding 
 # -----------------------------

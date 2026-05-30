@@ -5,13 +5,18 @@
 # install.packages("readxl")
 # install.packages ("mice")
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(cmprsk)
 library(survival)
 library(readxl)
 library (mice)
 
-dt_final <- readRDS("study3_analysis_final.rds")
+dt_final <- readRDS(study3_derived_path("study3_analysis_final.rds"))
 
 km_fit <- survfit(
   Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
@@ -50,7 +55,7 @@ summary(dt_final[event_inapp_shock == 1, t_followup_days_final])
 names(dt_final)
 
 
-dt_final <- readRDS("study3_analysis_final.rds")
+dt_final <- readRDS(study3_derived_path("study3_analysis_final.rds"))
 dt_final <- as.data.table(dt_final)
 
 # Fine–Gray event variable

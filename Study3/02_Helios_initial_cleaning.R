@@ -1,13 +1,18 @@
 ###################### HELIOS — Study 3: Cleaning, Events, Exclusions ######################
 
 rm(list = ls())
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(readxl)
 
 ###################### 1. PATHS ######################
 
-path_helios   <- "Helius.xlsx"
-path_smallmap <- "metadata/02_small_map.xlsx"
+path_helios   <- study3_raw_path("Helius.xlsx")
+path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 ###################### 2. READ AND MERGE HELIOS SHEETS ######################
 
@@ -132,5 +137,6 @@ desc_overview
 
 ###################### 8. EXPORT ######################
 
-saveRDS(dt_helios_final, "helios_events_clean.rds")
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+saveRDS(dt_helios_final, study3_derived_path("helios_events_clean.rds"))
 

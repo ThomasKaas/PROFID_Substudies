@@ -1,11 +1,19 @@
 
 ################ SAP sensitivity #########
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(survival)
 library(cmprsk)
 
-dt_final <- as.data.table(readRDS("study3_analysis_final.rds"))
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+dir.create(study3_output_root(), recursive = TRUE, showWarnings = FALSE)
+
+dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 
 #  6-month filter (SAP)
 min_fu_days <- 180
@@ -99,7 +107,7 @@ incidence_rates_6mo[endpoint == "app_shock_flag", endpoint := "app_shock_flag"]
 
 print(incidence_rates_6mo)
 
-fwrite(incidence_rates_6mo, "incidence_rates_per_100py_by_device_sens_min180d.csv")
+fwrite(incidence_rates_6mo, study3_output_path("incidence_rates_per_100py_by_device_sens_min180d.csv"))
 
 ############# Cox model (stratified by dataset) — sensitivity###################
 cox_sens_6mo <- coxph(
@@ -128,7 +136,7 @@ logrank_sens_6mo <- survdiff(
 cat("\n--- Log-rank (>=180d) ---\n")
 print(logrank_sens_6mo)
 
-png("figure_km_inapp_shock_by_device_sens_min180d.png", width = 1400, height = 900, res = 160)
+png(study3_output_path("figure_km_inapp_shock_by_device_sens_min180d.png"), width = 1400, height = 900, res = 160)
 plot(
   km_sens_6mo,
   col = c("red", "blue"),
@@ -183,7 +191,7 @@ cif_sens_6mo <- with(
   cuminc(t_followup_days_final, fg_event, group = device_group)
 )
 
-png("figure_cif_inapp_shock_by_device_sens_min180d.png", width = 1400, height = 900, res = 160)
+png(study3_output_path("figure_cif_inapp_shock_by_device_sens_min180d.png"), width = 1400, height = 900, res = 160)
 plot(
   cif_sens_6mo,
   lwd = 2,
@@ -211,4 +219,4 @@ cox.zph(cox_sens_6mo)
 summary(fg_sens_6mo)
 
 
-saveRDS(dt_sens_6mo, "study3_analysis_sensitivity_min180d.rds")
+saveRDS(dt_sens_6mo, study3_derived_path("study3_analysis_sensitivity_min180d.rds"))

@@ -9,6 +9,11 @@
 # install.packages("psych")
 # install.packages("stats")
 
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 
 library(readxl)
 library(data.table)
@@ -18,7 +23,7 @@ library(stats)
 
 ####### LOAD FINAL MERGED DATASET #######
  
-dt <- readRDS("study3_final_merged.rds")
+dt <- readRDS(study3_derived_path("study3_final_merged.rds"))
 
 ####### COHORT 1: BASELINE DESCRIPTIVES (ALL ELIGIBLE DATASETS)
 
@@ -263,9 +268,12 @@ missing_by_group
 
 ####### SAVE ANALYSIS COHORT #######
 
-saveRDS(dt_analysis, "study3_device_analysis_cohort.rds")
-fwrite(missing_by_group, "supplement_missingness_by_device.csv")
-fwrite(followup_summary, "followup_summary_by_device.csv")
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+dir.create(study3_output_root(), recursive = TRUE, showWarnings = FALSE)
+
+saveRDS(dt_analysis, study3_derived_path("study3_device_analysis_cohort.rds"))
+fwrite(missing_by_group, study3_output_path("supplement_missingness_by_device.csv"))
+fwrite(followup_summary, study3_output_path("followup_summary_by_device.csv"))
 
 
 ######################### Table 2 #######################
@@ -458,7 +466,7 @@ incidence_rates <- rbindlist(
 
 fwrite(
   incidence_rates,
-  "incidence_rates_per_100py_by_device_primary_all_datasets.csv"
+  study3_output_path("incidence_rates_per_100py_by_device_primary_all_datasets.csv")
 )
 
 ########## QC 1: RAW ENDPOINT VALUES BY DATASET ##########
@@ -610,7 +618,11 @@ table(dt_desc$dataset, dt_desc$total_inapp_shock)
 
 saveRDS(
   dt_analysis,
-  "study3_analysis_cohort_v2_final_followup.rds"
+  study3_derived_path("study3_analysis_cohort_v2_final_followup.rds")
+)
+saveRDS(
+  dt_analysis,
+  study3_derived_path("study3_analysis_final.rds")
 )
 
 

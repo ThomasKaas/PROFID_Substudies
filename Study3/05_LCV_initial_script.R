@@ -1,6 +1,10 @@
 ###################### LCV — Study 3: Cleaning, Events, Exclusions ######################
 
 rm(list = ls())
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
 
 library(data.table)
 library(readxl)
@@ -8,8 +12,8 @@ library(stringr)
 
 ###################### 1. PATHS ######################
 
-path_lcv      <- "LCV.xlsx"
-path_smallmap <- "metadata/02_small_map.xlsx"
+path_lcv      <- study3_raw_path("LCV.xlsx")
+path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 ###################### 2. READ RAW DATA ######################
 
@@ -138,4 +142,5 @@ desc_overview
 
 ###################### 11. EXPORT ######################
 
-saveRDS(dt_lcv_final, "lcv_events_clean.rds")
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+saveRDS(dt_lcv_final, study3_derived_path("lcv_events_clean.rds"))

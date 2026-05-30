@@ -1,14 +1,19 @@
 ###################### EU-CERT — Study 3: Cleaning, Events, Exclusions & Descriptives ######################
 
 rm(list = ls())
+study3_paths_file <- file.path("Study3", "study3_paths.R")
+if (!file.exists(study3_paths_file)) study3_paths_file <- "study3_paths.R"
+if (!file.exists(study3_paths_file)) study3_paths_file <- file.path("..", "study3_paths.R")
+source(study3_paths_file)
+
 library(data.table)
 library(readxl)
 library(lubridate)
 
 ###################### 1. PATHS ######################
 
-path_data     <- "eu-cert-icd.csv"
-path_smallmap <- "metadata/02_small_map.xlsx"
+path_data     <- study3_raw_path("eu-cert-icd.csv")
+path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 dt <- fread(path_data, na.strings = c("", NA))
 
@@ -144,4 +149,5 @@ dt2 <- dt[, ..keep_vars]
 ###################### 7. EXPORT CLEANED EU-CERT DATA ######################
 
 dt_eucert <- copy(dt2)
-saveRDS(dt_eucert, "eucert_events_clean.rds")
+dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
+saveRDS(dt_eucert, study3_derived_path("eucert_events_clean.rds"))
