@@ -149,10 +149,7 @@ p_final <- ggplot(km_df, aes(x = time, y = surv,
 out_png <- file.path(OUTDIR, "KM_FigB_survival_by_shock_fullcohort.png")
 out_pdf <- file.path(OUTDIR, "KM_FigB_survival_by_shock_fullcohort.pdf")
 
-suppressWarnings({
-  ggsave(out_png, plot = p_final, width = 7.5, height = 5.5, dpi = 300)
-  ggsave(out_pdf, plot = p_final, width = 7.5, height = 5.5)
-})
+study1_save_plot(p_final, out_png, out_pdf, width = 7.5, height = 5.5)
 
 cat(sprintf("\n✓ Saved:\n  %s\n  %s\n", out_png, out_pdf))
 

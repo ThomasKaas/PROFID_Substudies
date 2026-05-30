@@ -192,10 +192,7 @@ p_final <- p_main / p_risk +
 out_png <- file.path(OUTDIR, "KM_FigA_time_to_FIS_fullcohort.png")
 out_pdf <- file.path(OUTDIR, "KM_FigA_time_to_FIS_fullcohort.pdf")
 
-suppressWarnings({
-  ggsave(out_png, plot = p_final, width = 10, height = 5.5, dpi = 300)
-  ggsave(out_pdf, plot = p_final, width = 10, height = 5.5)
-})
+study1_save_plot(p_final, out_png, out_pdf, width = 10, height = 5.5)
 
 cat(sprintf("\n✓ Saved:\n  %s\n  %s\n", out_png, out_pdf))
 # ── Figure legend text for manuscript (NOT embedded in figure) ─────────────

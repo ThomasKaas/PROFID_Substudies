@@ -74,3 +74,54 @@ study1_output_path <- function(...) {
   file.path(study1_output_root(), ...)
 }
 
+study1_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300) {
+  dir.create(dirname(png_file), recursive = TRUE, showWarnings = FALSE)
+  dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)
+
+  png_device <- NULL
+  if (requireNamespace("ragg", quietly = TRUE)) {
+    png_device <- ragg::agg_png
+  } else if (capabilities("cairo")) {
+    png_device <- function(filename, width, height, units, res, ...) {
+      grDevices::png(
+        filename = filename,
+        width = width,
+        height = height,
+        units = units,
+        res = res,
+        type = "cairo",
+        ...
+      )
+    }
+  } else {
+    try(install.packages("ragg"), silent = TRUE)
+    if (requireNamespace("ragg", quietly = TRUE)) {
+      png_device <- ragg::agg_png
+    } else {
+      stop(
+        "Unable to save PNG: neither ragg nor Cairo PNG support is available. ",
+        "Install the R package 'ragg' or run R with Cairo support.",
+        call. = FALSE
+      )
+    }
+  }
+
+  ggplot2::ggsave(
+    filename = png_file,
+    plot = plot,
+    width = width,
+    height = height,
+    dpi = dpi,
+    device = png_device,
+    bg = "white"
+  )
+
+  pdf_device <- if (capabilities("cairo")) grDevices::cairo_pdf else grDevices::pdf
+  ggplot2::ggsave(
+    filename = pdf_file,
+    plot = plot,
+    width = width,
+    height = height,
+    device = pdf_device
+  )
+}
