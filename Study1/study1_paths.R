@@ -78,11 +78,23 @@ study1_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300)
   dir.create(dirname(png_file), recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)
 
-  png_device <- NULL
+  pdf_device <- if (capabilities("cairo")) grDevices::cairo_pdf else grDevices::pdf
+  ggplot2::ggsave(
+    filename = pdf_file,
+    plot = plot,
+    width = width,
+    height = height,
+    device = pdf_device
+  )
+
+  png_devices <- list()
+
   if (requireNamespace("ragg", quietly = TRUE)) {
-    png_device <- ragg::agg_png
-  } else if (capabilities("cairo")) {
-    png_device <- function(filename, width, height, units, res, ...) {
+    png_devices[["ragg::agg_png"]] <- ragg::agg_png
+  }
+
+  if (capabilities("cairo")) {
+    png_devices[["grDevices::png(type = 'cairo')"]] <- function(filename, width, height, units, res, ...) {
       grDevices::png(
         filename = filename,
         width = width,
@@ -93,35 +105,58 @@ study1_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300)
         ...
       )
     }
-  } else {
-    try(install.packages("ragg"), silent = TRUE)
-    if (requireNamespace("ragg", quietly = TRUE)) {
-      png_device <- ragg::agg_png
-    } else {
-      stop(
-        "Unable to save PNG: neither ragg nor Cairo PNG support is available. ",
-        "Install the R package 'ragg' or run R with Cairo support.",
-        call. = FALSE
+  }
+
+  if (nzchar(Sys.which("gs"))) {
+    png_devices[["grDevices::bitmap(type = 'png16m')"]] <- function(filename, width, height, units, res, ...) {
+      grDevices::bitmap(
+        file = filename,
+        type = "png16m",
+        width = width,
+        height = height,
+        units = units,
+        res = res,
+        ...
       )
     }
   }
 
-  ggplot2::ggsave(
-    filename = png_file,
-    plot = plot,
-    width = width,
-    height = height,
-    dpi = dpi,
-    device = png_device,
-    bg = "white"
+  png_errors <- character(0)
+  for (device_name in names(png_devices)) {
+    ok <- tryCatch(
+      {
+        ggplot2::ggsave(
+          filename = png_file,
+          plot = plot,
+          width = width,
+          height = height,
+          dpi = dpi,
+          device = png_devices[[device_name]],
+          bg = "white"
+        )
+        TRUE
+      },
+      error = function(e) {
+        png_errors <<- c(png_errors, sprintf("%s: %s", device_name, conditionMessage(e)))
+        FALSE
+      }
+    )
+
+    if (ok) return(invisible(TRUE))
+  }
+
+  warning(
+    sprintf(
+      paste(
+        "Saved PDF but could not save PNG '%s'.",
+        "No working headless PNG device was available.",
+        "Tried: %s"
+      ),
+      png_file,
+      if (length(png_errors)) paste(png_errors, collapse = "; ") else "none"
+    ),
+    call. = FALSE
   )
 
-  pdf_device <- if (capabilities("cairo")) grDevices::cairo_pdf else grDevices::pdf
-  ggplot2::ggsave(
-    filename = pdf_file,
-    plot = plot,
-    width = width,
-    height = height,
-    device = pdf_device
-  )
+  invisible(FALSE)
 }
