@@ -492,14 +492,22 @@ survfit(
 ```
 
 2. Runs a log-rank test with `survdiff()`.
-3. Plots inappropriate shock event-free survival by device group.
-4. Builds a Fine-Gray event indicator:
+3. Saves Figure 1 as a Kaplan-Meier plot of inappropriate shock event-free survival by device group with the x-axis display limited to 3,000 days and a number-at-risk table below the curves.
+4. Keeps the original Kaplan-Meier plot design: red and blue solid curves, line width 2, same y-axis label, and bottom-left legend placement.
+5. Builds a Fine-Gray event indicator:
    - `0` censored
    - `1` inappropriate shock
    - `2` death before inappropriate shock as competing event
-5. Uses `cmprsk::crr()` with `device_group` as covariate.
-6. Extracts subdistribution hazard ratio, 95 percent confidence interval, and p value.
-7. Builds cumulative incidence curves with `cuminc()`.
+6. Uses `cmprsk::crr()` with `device_group` as covariate.
+7. Extracts subdistribution hazard ratio, 95 percent confidence interval, and p value.
+8. Builds cumulative incidence curves with `cuminc()`.
+
+Main outputs:
+
+- `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
+- `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
+
+The Figure 1 changes are output-only. They do not modify the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray model, or cumulative-incidence analysis.
 
 Important reproducibility issue:
 
@@ -758,6 +766,11 @@ Sensitivity outputs:
 - `figure_km_inapp_shock_by_device_sens_min180d.png`
 - `figure_cif_inapp_shock_by_device_sens_min180d.png`
 - `study3_analysis_sensitivity_min180d.rds`
+
+Kaplan-Meier / Fine-Gray outputs:
+
+- `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
+- `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
 
 Intermediate or expected files not produced in this checkout:
 

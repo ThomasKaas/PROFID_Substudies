@@ -56,19 +56,116 @@ survdiff(
   data = dt_final
 )
 
+study3_km_risk_table <- function(fit, times, labels) {
+  risk_summary <- summary(fit, times = times, extend = TRUE)
 
-plot(
-  km_fit,
-  col = c("red", "blue"),
-  lwd = 2,
-  xlab = "Days since ICD implantation",
-  ylab = "Event-free survival (inappropriate shock)",
-  xlim = c(0, 4000),
-  mark.time = TRUE
+  risk_table <- matrix(
+    NA_integer_,
+    nrow = length(labels),
+    ncol = length(times),
+    dimnames = list(labels, as.character(times))
+  )
+
+  strata_labels <- sub("^device_group=", "", as.character(risk_summary$strata))
+  if (length(strata_labels) == 0L && length(labels) == 1L) {
+    strata_labels <- rep(labels, length(risk_summary$time))
+  }
+
+  for (i in seq_along(risk_summary$time)) {
+    risk_table[
+      strata_labels[[i]],
+      as.character(risk_summary$time[[i]])
+    ] <- risk_summary$n.risk[[i]]
+  }
+
+  risk_table
+}
+
+study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
+  x_breaks <- seq(0, x_limit, by = 500)
+  risk_table <- study3_km_risk_table(fit, x_breaks, labels)
+  n_groups <- length(labels)
+  curve_col <- rep(c("red", "blue"), length.out = n_groups)
+  curve_lty <- rep(1, n_groups)
+
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par), add = TRUE)
+
+  layout(matrix(c(1, 2), nrow = 2), heights = c(3.4, 1.25))
+
+  par(mar = c(0.3, 5.4, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
+  plot(
+    fit,
+    col = curve_col,
+    lty = curve_lty,
+    lwd = 2,
+    xlab = "",
+    ylab = "Event-free survival (inappropriate shock)",
+    xlim = c(0, x_limit),
+    xaxt = "n",
+    mark.time = TRUE,
+    conf.int = FALSE
+  )
+  axis(1, at = x_breaks, labels = FALSE, tck = -0.015)
+  legend(
+    "bottomleft",
+    legend = labels,
+    col = curve_col,
+    lty = curve_lty,
+    lwd = 2,
+    bty = "n",
+    inset = 0.01
+  )
+
+  par(mar = c(3.2, 5.4, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
+  plot(
+    NA,
+    xlim = c(0, x_limit),
+    ylim = c(0.5, n_groups + 1.0),
+    axes = FALSE,
+    xlab = "",
+    ylab = ""
+  )
+  axis(1, at = x_breaks, labels = x_breaks, tick = FALSE, line = 0.2, cex.axis = 0.9)
+  mtext("Days since ICD implantation", side = 1, line = 2.0, cex = 0.95)
+
+  row_y <- rev(seq_len(n_groups))
+  par(xpd = NA)
+  text(-0.09 * x_limit, n_groups + 0.65, "Number at risk", adj = 1, font = 2, cex = 0.9)
+  text(-0.09 * x_limit, row_y, labels, adj = 1, cex = 0.85)
+
+  for (j in seq_along(x_breaks)) {
+    text(x_breaks[[j]], row_y, risk_table[, j], cex = 0.85)
+  }
+  par(xpd = FALSE)
+}
+
+km_labels <- sub("^device_group=", "", names(km_fit$strata))
+if (!length(km_labels)) km_labels <- levels(factor(dt_final$device_group))
+
+study3_save_grid(
+  draw = function() {
+    study3_draw_km_with_risk_table(
+      fit = km_fit,
+      labels = km_labels,
+      x_limit = 3000
+    )
+  },
+  png_file = study3_output_path("figure_1_km_inapp_shock_by_device_3000d_risk_table.png"),
+  pdf_file = study3_output_path("figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf"),
+  png_width = 1800,
+  png_height = 1350,
+  png_res = 300,
+  pdf_width = 6.0,
+  pdf_height = 4.5
 )
 
-legend("bottomleft", legend = levels(factor(dt_final$device_group)),
-       col = c("red", "blue"), lwd = 2)
+
+study3_draw_km_with_risk_table(
+  fit = km_fit,
+  labels = km_labels,
+  x_limit = 3000
+)
 
 
 

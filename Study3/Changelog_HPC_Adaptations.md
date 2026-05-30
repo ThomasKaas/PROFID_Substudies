@@ -151,6 +151,17 @@ In simple words:
 
 No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gray model, event coding, 180-day filter, plot contents, labels, colors, and line widths remain the same. Only the way the completed plots are written to disk was made compatible with the HPC environment.
 
+## Figure 1 Kaplan-Meier Output Adaptation
+
+`Study3/09_Kaplan Maier and Fine Gray.R` now saves an updated Figure 1 Kaplan-Meier plot for inappropriate shock by device group:
+
+- x-axis display is limited to 3,000 days
+- a number-at-risk table is drawn below the Kaplan-Meier curves
+- PNG and PDF copies are written to `Study3/outputs`
+- the original visual design is kept: red and blue solid Kaplan-Meier curves, line width 2, same y-axis label, and bottom-left legend placement
+
+This is an output-only plotting adaptation. It does not change the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray event coding, Fine-Gray model, cumulative-incidence analysis, or any statistical result.
+
 ## How To Check Paths On HPC
 
 From the repository root:
