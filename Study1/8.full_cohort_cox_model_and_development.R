@@ -1961,19 +1961,16 @@ g_tbl <- arrangeGrob(tg_tbl, foot_tbl, ncol=1,
 
 
 
-png(file.path(OUTDIR, "09_subgroup_table.png"),
-    
-    width=3600, height=nrow(tbl_full)*220+500, res=300)
-
-grid.newpage(); grid.draw(g_tbl); dev.off()
-
-
-
-pdf(file.path(OUTDIR, "09_subgroup_table.pdf"),
-    
-    width=14, height=max(7, nrow(tbl_full)*0.42+1.5))
-
-grid.newpage(); grid.draw(g_tbl); dev.off()
+study1_save_grid(
+  function() { grid.newpage(); grid.draw(g_tbl) },
+  file.path(OUTDIR, "09_subgroup_table.png"),
+  file.path(OUTDIR, "09_subgroup_table.pdf"),
+  png_width = 3600,
+  png_height = nrow(tbl_full)*220+500,
+  png_res = 300,
+  pdf_width = 14,
+  pdf_height = max(7, nrow(tbl_full)*0.42+1.5)
+)
 
 
 
@@ -2253,19 +2250,16 @@ g_tbl <- arrangeGrob(tg_tbl, foot_tbl, ncol=1,
 
 
 
-png(file.path(OUTDIR, "09_subgroup_table.png"),
-    
-    width=3200, height=nrow(tbl_full)*220+400, res=300)
-
-grid.newpage(); grid.draw(g_tbl); dev.off()
-
-
-
-pdf(file.path(OUTDIR, "09_subgroup_table.pdf"),
-    
-    width=12, height=max(6, nrow(tbl_full)*0.42+1.5))
-
-grid.newpage(); grid.draw(g_tbl); dev.off()
+study1_save_grid(
+  function() { grid.newpage(); grid.draw(g_tbl) },
+  file.path(OUTDIR, "09_subgroup_table.png"),
+  file.path(OUTDIR, "09_subgroup_table.pdf"),
+  png_width = 3200,
+  png_height = nrow(tbl_full)*220+400,
+  png_res = 300,
+  pdf_width = 12,
+  pdf_height = max(6, nrow(tbl_full)*0.42+1.5)
+)
 
 
 
@@ -2369,13 +2363,14 @@ fp_plot <- ggplot(fp, aes(y=plot_label)) +
 
 
 
-ggsave(file.path(OUTDIR, "14_forest_plot_subgroups.png"),
-       
-       fp_plot, width=10, height=plot_h, dpi=300)
-
-ggsave(file.path(OUTDIR, "14_forest_plot_subgroups.pdf"),
-       
-       fp_plot, width=10, height=plot_h)
+study1_save_plot(
+  fp_plot,
+  file.path(OUTDIR, "14_forest_plot_subgroups.png"),
+  file.path(OUTDIR, "14_forest_plot_subgroups.pdf"),
+  width = 10,
+  height = plot_h,
+  dpi = 300
+)
 
 msg("Saved: 14_forest_plot_subgroups.png/.pdf")
 
@@ -2449,19 +2444,16 @@ tg_hr <- tableGrob(tbl_hr, rows=NULL, theme=tbl_hr_theme)
 
 
 
-png(file.path(OUTDIR, "14_forest_HR_sidetable.png"),
-    
-    width=1800, height=nrow(tbl_hr)*220+200, res=300)
-
-grid.newpage(); grid.draw(tg_hr); dev.off()
-
-
-
-pdf(file.path(OUTDIR, "14_forest_HR_sidetable.pdf"),
-    
-    width=6, height=max(4, nrow(tbl_hr)*0.42+0.5))
-
-grid.newpage(); grid.draw(tg_hr); dev.off()
+study1_save_grid(
+  function() { grid.newpage(); grid.draw(tg_hr) },
+  file.path(OUTDIR, "14_forest_HR_sidetable.png"),
+  file.path(OUTDIR, "14_forest_HR_sidetable.pdf"),
+  png_width = 1800,
+  png_height = nrow(tbl_hr)*220+200,
+  png_res = 300,
+  pdf_width = 6,
+  pdf_height = max(4, nrow(tbl_hr)*0.42+0.5)
+)
 
 
 

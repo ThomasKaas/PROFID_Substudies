@@ -494,42 +494,13 @@ plot_missingness <- function(miss_dt,
   
   
   
-  ggplot2::ggsave(
-    
-    
-    
-    filename = file.path(out_dir, paste0("missingness_lollipop_top", top_n, "_", label, ".png")),
-    
-    
-    
-    plot = p,
-    
-    
-    
-    width = width,
-    
-    
-    
-    height = height,
-    
-    
-    
-    dpi = dpi
-    
-    
-    
-  )
-  
   outfile <- file.path(out_dir,
-                       
                        paste0("missingness_lollipop_top", top_n, "_", label, ".png"))
-  
-  
-  
-  ggplot2::ggsave(outfile, p, width = width, height = height, dpi = dpi)
-  
-  
-  
+  pdf_outfile <- sub("\\.png$", ".pdf", outfile)
+  study1_save_plot(p, outfile, pdf_outfile, width = width, height = height, dpi = dpi)
+
+
+
   message("Saved missingness plot to: ", outfile)
   
   

@@ -730,13 +730,14 @@ save_forest_plot <- function(tidy_dt, title, out_prefix) {
   
   
   
-  ggsave(file.path(OUTDIR, paste0(out_prefix, ".png")), p,
-         
-         width = 9.2, height = 6.5, dpi = 350)   # taller for extra covariate rows
-  
-  ggsave(file.path(OUTDIR, paste0(out_prefix, ".pdf")), p,
-         
-         width = 9.2, height = 6.5)
+  study1_save_plot(
+    p,
+    file.path(OUTDIR, paste0(out_prefix, ".png")),
+    file.path(OUTDIR, paste0(out_prefix, ".pdf")),
+    width = 9.2,
+    height = 6.5,
+    dpi = 350
+  )   # taller for extra covariate rows
   
 }
 
@@ -1038,13 +1039,14 @@ save_cif_figures_full <- function(L_days, lm_label) {
     
     p <- make_cif_plot(d, sprintf("CIF (Full Cohort) — Landmark %s", lm_label))
     
-    ggsave(file.path(OUTDIR, sprintf("FULL_CIF_%s.png", lm_label)),
-           
-           p, width = 7.8, height = 7.8, dpi = 350)
-    
-    ggsave(file.path(OUTDIR, sprintf("FULL_CIF_%s.pdf", lm_label)),
-           
-           p, width = 7.8, height = 7.8)
+    study1_save_plot(
+      p,
+      file.path(OUTDIR, sprintf("FULL_CIF_%s.png", lm_label)),
+      file.path(OUTDIR, sprintf("FULL_CIF_%s.pdf", lm_label)),
+      width = 7.8,
+      height = 7.8,
+      dpi = 350
+    )
     
     cat(sprintf("  Saved CIF: FULL_CIF_%s.png/.pdf\n", lm_label))
     

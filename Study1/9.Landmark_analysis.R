@@ -298,8 +298,7 @@ save_forest_plot_pub <- function(tidy_dt, lm_label) {
   
   png_file <- file.path(OUTDIR, sprintf("forest_%s.png", lm_label))
   pdf_file <- file.path(OUTDIR, sprintf("forest_%s.pdf", lm_label))
-  ggsave(png_file, p, width=8.2, height=5.3, dpi=300)
-  ggsave(pdf_file, p, width=8.2, height=5.3)
+  study1_save_plot(p, png_file, pdf_file, width=8.2, height=5.3, dpi=300)
   list(png=png_file, pdf=pdf_file)
 }
 
