@@ -53,9 +53,14 @@ invisible(lapply(pkgs, function(p) {
 
 # =============================================================================
 
-INFILE  <- "T:/Study_1/Imputed_data/mice_full_object1.rds"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-OUTDIR  <- "T:/Study_1/Supplementary_data/Sensitivity"
+INFILE  <- study1_derived_path("Imputed_data", "mice_full_object1.rds")
+
+OUTDIR  <- study1_output_path("Supplementary_data", "Sensitivity")
 
 dir.create(OUTDIR, showWarnings = FALSE, recursive = TRUE)
 msg <- function(...) cat(sprintf(...), "\n")
@@ -476,7 +481,7 @@ msg("Landmark risk table saved: %s", file.path(OUTDIR, "LANDMARK_risk_table.html
 # =============================================================================
 msg("\n=== Building consistency comparison table ===")
 
-INFILE_PRIMARY <- "T:/Study_1/Supplementary_data/Primary/07_primary_model_strata_DB.csv"
+INFILE_PRIMARY <- study1_output_path("Supplementary_data", "Primary", "07_primary_model_strata_DB.csv")
 
 primary_row <- tryCatch({
   pm <- fread(INFILE_PRIMARY)

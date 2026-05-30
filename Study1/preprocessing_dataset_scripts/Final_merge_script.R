@@ -50,21 +50,24 @@ library(broom)
 
 # =============================================================================
 
-IN_ICD_CSV   <- "//Charite.de/Centren/AG/f-dhzc-profid/Data Transfer to Charite/ICD.csv"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+IN_ICD_CSV   <- profid_transfer_path("ICD.csv")
+
+IN_CERT_RDS  <- study1_derived_path("EUCID", "eu_cert_icd_cdm_ready.rds")
+
+IN_HELS_RDS  <- study1_derived_path("HELIOS", "helios_cdm_ready.rds")
+
+IN_ISRL_RDS  <- study1_derived_path("ISRAEL", "processed-isrl-common-data-model.rds")
+
+IN_PRSE_RDS  <- study1_derived_path("PROSE", "prose_cdm_ready.rds")
 
 
 
-IN_CERT_RDS  <- "T:/EUCID/eu_cert_icd_cdm_ready.rds"
-
-IN_HELS_RDS  <- "T:/HELIOS/helios/helios_cdm_ready.rds"
-
-IN_ISRL_RDS  <- "T:/ISRAEL/israel_final/processed-isrl-common-data-model.rds"
-
-IN_PRSE_RDS  <- "T:/PROSE/prose_cdm_ready.rds"
-
-
-
-OUT_DIR      <- "T:/FINAL ICD COHORT"
+OUT_DIR      <- study1_derived_path("FINAL_ICD_COHORT")
 
 OUT_RDS      <- file.path(OUT_DIR, "icd_merged1.rds")
 

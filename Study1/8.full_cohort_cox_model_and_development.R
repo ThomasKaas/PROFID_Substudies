@@ -36,12 +36,16 @@ invisible(lapply(pkgs, function(p) {
   library(p, character.only = TRUE)
 }))
 
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-OUTDIR <- "T:/Study_1/Supplementary_data/Primary"
+OUTDIR <- study1_output_path("Supplementary_data", "Primary")
 
 dir.create(OUTDIR, showWarnings = FALSE, recursive = TRUE)
 
-t_full <- readRDS("T:/Study_1/Imputed_data/mice_full_object1.rds")
+t_full <- readRDS(study1_derived_path("Imputed_data", "mice_full_object1.rds"))
 m_full  <- t_full$m
 
 # Derive QRS_log1p across all imputations

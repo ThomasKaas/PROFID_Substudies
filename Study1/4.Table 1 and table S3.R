@@ -75,9 +75,14 @@ cat("All packages loaded successfully\n")
 
 # =============================================================================
 
-IN_RDS <- "T:/Study_1/master_clean_dataset1.rds"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-OUTDIR <- "T:/Study_1/Supplementary_data"
+IN_RDS <- study1_derived_path("master_clean_dataset1.rds")
+
+OUTDIR <- study1_output_path("Supplementary_data")
 
 dir.create(OUTDIR, showWarnings = FALSE, recursive = TRUE)
 

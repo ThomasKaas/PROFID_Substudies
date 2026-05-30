@@ -37,16 +37,21 @@ library(haven)
 # 2) Paths / configuration
 # =============================================================================
 
-# Inputs
-IN_PROSE_CSV   <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_hopkins_prose_study.csv"
-IN_JOIN_ID_CSV <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_coenrolled.csv"
-IN_DICT_XLSX   <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/prose-icd/data/dictionary/prose-only-data-dictionary-raw-v1.xlsx"
-IN_CDM_CSV     <- "S:/AG/f-dhzc-profid/datasets/local/prose-lvscd/scripts/cdm/profid-common-data-model.csv"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-source("//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/prose-icd/scripts/hz-scripts/hz-basic-summary-statistics.R")
+# Inputs
+IN_PROSE_CSV   <- profid_dataset_path("local", "prose-icd", "data", "original", "FinaltoPROFID_PROSEonlysent_hopkins_prose_study.csv")
+IN_JOIN_ID_CSV <- profid_dataset_path("local", "prose-icd", "data", "original", "FinaltoPROFID_PROSEonlysent_coenrolled.csv")
+IN_DICT_XLSX   <- profid_dataset_path("local", "prose-icd", "data", "dictionary", "prose-only-data-dictionary-raw-v1.xlsx")
+IN_CDM_CSV     <- profid_dataset_path("local", "prose-lvscd", "scripts", "cdm", "profid-common-data-model.csv")
+
+source(profid_dataset_path("local", "prose-icd", "scripts", "hz-scripts", "hz-basic-summary-statistics.R"))
 
 # Outputs
-OUT_DIR        <- "T:/PROSE"
+OUT_DIR        <- study1_derived_path("PROSE")
 OUT_RDS        <- file.path(OUT_DIR, "prose_cdm_ready.rds")
 OUT_CSV        <- file.path(OUT_DIR, "prose_cdm_ready.csv")
 OUT_QC_CSV     <- file.path(OUT_DIR, "prose_qc_summary.csv")

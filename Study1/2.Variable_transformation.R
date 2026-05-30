@@ -4,8 +4,13 @@
 ###############################################################################
 library(ggplot2)
 install.packages("gridExtra")
-library(gridExtra) 
+library(gridExtra)
 library(data.table)
+
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
 cat("\n=== LOG TRANSFORMATION ===\n\n")
 
@@ -13,7 +18,7 @@ cat("\n=== LOG TRANSFORMATION ===\n\n")
 # 1. LOAD DATA
 ###############################################################################
 
-dlt <- readRDS("T:/FINAL ICD COHORT/standardised_data1.rds")
+dlt <- readRDS(study1_derived_path("FINAL_ICD_COHORT", "standardised_data1.rds"))
 setDT(dlt)
 names(dlt)
 cat(sprintf("Loaded: %d observations, %d variables\n\n", nrow(dlt), ncol(dlt)))
@@ -264,5 +269,5 @@ if ("Status_FIS" %in% names(dlt)) {
   print(table(dlt$age_group, dlt$Status_FIS, useNA = "ifany"))
 }
 
-saveRDS(dlt, "T:/FINAL ICD COHORT/Transformed_data1.rds")
+saveRDS(dlt, study1_derived_path("FINAL_ICD_COHORT", "Transformed_data1.rds"))
 

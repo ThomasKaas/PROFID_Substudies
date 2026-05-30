@@ -8,7 +8,12 @@ suppressPackageStartupMessages({
   library(gt)
 })
 
-OUT_QC_DIR <- "T:/Study_1/Pre-processing"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+OUT_QC_DIR <- study1_output_path("Pre-processing")
 dir.create(OUT_QC_DIR, showWarnings = FALSE, recursive = TRUE)
 
 map_dt <- data.table(

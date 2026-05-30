@@ -16,8 +16,13 @@ invisible(lapply(pkgs, function(p) {
 
 
 # ── Paths ──────────────────────────────────────────────────────────────────
-INFILE <- "T:/Study_1/master_clean_dataset1.rds"
-OUTDIR <- "T:/Study_1/Supplementary_data"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+INFILE <- study1_derived_path("master_clean_dataset1.rds")
+OUTDIR <- study1_output_path("Supplementary_data")
 dir.create(OUTDIR, showWarnings = FALSE, recursive = TRUE)
 
 # ── Load full cohort ───────────────────────────────────────────────────────

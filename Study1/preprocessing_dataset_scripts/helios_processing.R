@@ -54,19 +54,20 @@ library(stringr)
 
 # =============================================================================
 
-IN_XLSX     <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/helios-rdb/data/original/Final_delivery.2021-05-20._Ali EDxlsx.xlsx"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-IN_DICT_CSV <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/helios-rdb/data/dictionary/helios-data-dictionary-raw.csv"
+IN_XLSX     <- profid_dataset_path("local", "helios-rdb", "data", "original", "Final_delivery.2021-05-20._Ali EDxlsx.xlsx")
 
-IN_CDM_CSV  <- "S:/AG/f-dhzc-profid/datasets/local/helios-rdb/scripts/cdm/profid-common-data-model.csv"
+IN_DICT_CSV <- profid_dataset_path("local", "helios-rdb", "data", "dictionary", "helios-data-dictionary-raw.csv")
 
+IN_CDM_CSV  <- profid_dataset_path("local", "helios-rdb", "scripts", "cdm", "profid-common-data-model.csv")
 
+source(profid_dataset_path("local", "helios-rdb", "scripts", "hz-scripts", "hz-basic-summary-statistics.R"))
 
-source("S:/AG/f-dhzc-profid/datasets/local/helios-rdb/scripts/hz-scripts/hz-basic-summary-statistics.R")
-
-
-
-OUT_DIR      <- "T:/HELIOS"
+OUT_DIR      <- study1_derived_path("HELIOS")
 
 OUT_RDS      <- file.path(OUT_DIR, "helios_cdm_ready.rds")
 

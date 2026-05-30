@@ -48,19 +48,20 @@ library(openxlsx)
 
 # =============================================================================
 
-IN_CSV       <-  "//Charite.de/Centren/AG/f-dhzc-profid/datasets/local/eu-cert-icd/data/original/registry_data_eu-cert-icd_selection_161019-Data-sheet.csv"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-IN_DICT_XLSX <- "S:/AG/f-dhzc-profid/datasets/local/eu-cert-icd/data/dictionary/eu-cert-icd-data-dictionary-raw.xlsx"
+IN_CSV       <- profid_dataset_path("local", "eu-cert-icd", "data", "original", "registry_data_eu-cert-icd_selection_161019-Data-sheet.csv")
 
-IN_CDM_CSV   <- "//Charite.de/Centren/AG/f-dhzc-profid/datasets/cdm/profid-common-data-model.csv"
+IN_DICT_XLSX <- profid_dataset_path("local", "eu-cert-icd", "data", "dictionary", "eu-cert-icd-data-dictionary-raw.xlsx")
 
+IN_CDM_CSV   <- profid_dataset_path("cdm", "profid-common-data-model.csv")
 
+source(profid_dataset_path("local", "eu-cert-icd", "scripts", "hz-scripts", "hz-basic-summary-statistics.R"))
 
-source("S:/AG/f-dhzc-profid/datasets/local/eu-cert-icd/scripts/hz-scripts/hz-basic-summary-statistics.R")
-
-
-
-OUT_DIR      <- "T:/EUCID"
+OUT_DIR      <- study1_derived_path("EUCID")
 
 OUT_RDS      <- file.path(OUT_DIR, "eu_cert_icd_cdm_ready.rds")
 

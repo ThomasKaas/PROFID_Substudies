@@ -42,7 +42,12 @@ set.seed(123)
 
 
 
-d <- readRDS("T:/Study_1/master_clean_dataset1.rds")
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+d <- readRDS(study1_derived_path("master_clean_dataset1.rds"))
 
 setDT(d)
 
@@ -175,7 +180,7 @@ cat("STEP 3.5) Assess missingness (train + test)...\n")
 
 
 
-DIR_FIG <- "T:Study_1/Imputed_data/Figures"
+DIR_FIG <- study1_derived_path("Imputed_data", "Figures")
 
 
 
@@ -569,7 +574,7 @@ plot_missingness(miss_full, "FULL")
 
 
 
-DIR_LOG <- "T:Study_1/Imputed_data/Logs"
+DIR_LOG <- study1_derived_path("Imputed_data", "Logs")
 
 
 
@@ -1339,7 +1344,7 @@ cat("QRS NAs in imp 1:", sum(is.na(imp1$QRS)), "\n")
 cat("QRS_log1p NAs in imp 1:", sum(is.na(imp1$QRS_log1p)), "\n")
 # Save outputs
 
-DIR_MI <- "T:Study_1/Imputed_data"
+DIR_MI <- study1_derived_path("Imputed_data")
 
 dir.create(DIR_MI, recursive = TRUE, showWarnings = FALSE)
 

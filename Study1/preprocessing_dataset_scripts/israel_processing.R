@@ -21,12 +21,17 @@ library(haven)
 # ---------------------------------------------------------------------------
 # Inputs (EDIT PATHS)
 # ---------------------------------------------------------------------------
-IN_RAW_CSV   <- "S:/AG/f-dhzc-profid/datasets/local/israeli-icd/data/original/ICDALL_20170630.csv"
-IN_DICT_XLSX <- "S:/AG/f-dhzc-profid/datasets/local/israeli-icd/data/dictionary/israeli-icd-data-dictionary-raw-v3.xlsx"
-IN_CDM_CSV   <- "S:/AG/f-dhzc-profid/datasets/local/israeli-icd/scripts/cdm/profid-common-data-model.csv"
-IN_HZ_SCRIPT <- "S:/AG/f-dhzc-profid/datasets/local/israeli-icd/scripts/hz-scripts/hz-basic-summary-statistics.R"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
-OUT_DIR      <- "T:/ISRAEL"
+IN_RAW_CSV   <- profid_dataset_path("local", "israeli-icd", "data", "original", "ICDALL_20170630.csv")
+IN_DICT_XLSX <- profid_dataset_path("local", "israeli-icd", "data", "dictionary", "israeli-icd-data-dictionary-raw-v3.xlsx")
+IN_CDM_CSV   <- profid_dataset_path("local", "israeli-icd", "scripts", "cdm", "profid-common-data-model.csv")
+IN_HZ_SCRIPT <- profid_dataset_path("local", "israeli-icd", "scripts", "hz-scripts", "hz-basic-summary-statistics.R")
+
+OUT_DIR      <- study1_derived_path("ISRAEL")
 OUT_RDS      <- file.path(OUT_DIR, "processed-isrl-common-data-model.rds")
 OUT_CSV      <- file.path(OUT_DIR, "processed-ISRAEL-common-data-model.csv")
 OUT_QC_CSV   <- file.path(OUT_DIR, "qc-israel-preprocessing.csv")

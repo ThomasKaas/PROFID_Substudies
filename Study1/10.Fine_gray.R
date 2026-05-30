@@ -66,11 +66,15 @@ suppressPackageStartupMessages({
 
 
 
-PATH_FULL <- "T:/Study_1/Imputed_data/mice_full_object1.rds"  # FULL COHORT MICE object
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+PATH_FULL <- study1_derived_path("Imputed_data", "mice_full_object1.rds")  # FULL COHORT MICE object
 
 
-
-OUTDIR <- "T:/Study_1/Supplementary_data/Fine_gray"
+OUTDIR <- study1_output_path("Supplementary_data", "Fine_gray")
 
 dir.create(OUTDIR, showWarnings = FALSE, recursive = TRUE)
 

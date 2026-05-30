@@ -60,11 +60,14 @@ library(gt)
 
 # =============================================================================
 
-IN_MERGED_CSV <- "T:/FINAL ICD COHORT/icd_merged1.csv"
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
 
+IN_MERGED_CSV <- study1_derived_path("FINAL_ICD_COHORT", "icd_merged1.csv")
 
-
-OUT_DIR  <- "T:/FINAL ICD COHORT"
+OUT_DIR  <- study1_derived_path("FINAL_ICD_COHORT")
 
 OUT_CSV  <- file.path(OUT_DIR, "standardised_data1.csv")
 
