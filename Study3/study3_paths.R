@@ -41,10 +41,23 @@ profid_data_root <- function() {
 }
 
 study3_raw_root <- function() {
-  Sys.getenv(
-    "PROFID_STUDY3_RAW_ROOT",
-    unset = profid_data_path("raw", "Study3")
+  env_root <- Sys.getenv("PROFID_STUDY3_RAW_ROOT", unset = "")
+  if (nzchar(env_root)) {
+    return(normalizePath(env_root, winslash = "/", mustWork = FALSE))
+  }
+
+  roots <- c(
+    profid_data_path("raw", "Study3"),
+    file.path(study3_repo_root(), "Study3"),
+    study3_repo_root(),
+    profid_data_path("Study3"),
+    profid_data_path("Data_Transfer_to_Charite", "Study3")
   )
+
+  existing <- roots[dir.exists(roots)]
+  if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
+
+  roots[[1]]
 }
 
 study3_derived_root <- function() {
@@ -62,10 +75,21 @@ study3_output_root <- function() {
 }
 
 study3_metadata_root <- function() {
-  Sys.getenv(
-    "PROFID_STUDY3_METADATA_ROOT",
-    unset = file.path(study3_repo_root(), "Study3")
+  env_root <- Sys.getenv("PROFID_STUDY3_METADATA_ROOT", unset = "")
+  if (nzchar(env_root)) {
+    return(normalizePath(env_root, winslash = "/", mustWork = FALSE))
+  }
+
+  roots <- c(
+    file.path(study3_repo_root(), "Study3"),
+    file.path(study3_repo_root(), "Study3", "metadata"),
+    file.path(study3_repo_root(), "Study3", "Study3", "metadata")
   )
+
+  existing <- roots[dir.exists(roots)]
+  if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
+
+  roots[[1]]
 }
 
 profid_data_path <- function(...) {
@@ -73,7 +97,21 @@ profid_data_path <- function(...) {
 }
 
 profid_transfer_path <- function(...) {
-  profid_data_path("Data_Transfer_to_Charite", ...)
+  parts <- c(...)
+  candidates <- file.path(
+    c(
+      profid_data_path("Data_Transfer_to_Charite"),
+      study3_repo_root(),
+      file.path(study3_repo_root(), "Study3"),
+      study3_raw_root()
+    ),
+    do.call(file.path, as.list(parts))
+  )
+
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
+
+  candidates[[1]]
 }
 
 profid_dataset_path <- function(...) {
@@ -81,7 +119,22 @@ profid_dataset_path <- function(...) {
 }
 
 study3_raw_path <- function(...) {
-  file.path(study3_raw_root(), ...)
+  parts <- c(...)
+  roots <- unique(c(
+    Sys.getenv("PROFID_STUDY3_RAW_ROOT", unset = ""),
+    profid_data_path("raw", "Study3"),
+    file.path(study3_repo_root(), "Study3"),
+    study3_repo_root(),
+    profid_data_path("Study3"),
+    profid_data_path("Data_Transfer_to_Charite", "Study3")
+  ))
+  roots <- roots[nzchar(roots)]
+  candidates <- file.path(roots, do.call(file.path, as.list(parts)))
+
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
+
+  candidates[[1]]
 }
 
 study3_derived_path <- function(...) {
@@ -98,7 +151,20 @@ study3_output_path <- function(...) {
 }
 
 study3_metadata_path <- function(...) {
-  file.path(study3_metadata_root(), ...)
+  parts <- c(...)
+  roots <- unique(c(
+    Sys.getenv("PROFID_STUDY3_METADATA_ROOT", unset = ""),
+    file.path(study3_repo_root(), "Study3"),
+    file.path(study3_repo_root(), "Study3", "metadata"),
+    file.path(study3_repo_root(), "Study3", "Study3", "metadata")
+  ))
+  roots <- roots[nzchar(roots)]
+  candidates <- file.path(roots, do.call(file.path, as.list(parts)))
+
+  existing <- candidates[file.exists(candidates)]
+  if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
+
+  candidates[[1]]
 }
 
 study3_configure_headless_graphics <- function() {
