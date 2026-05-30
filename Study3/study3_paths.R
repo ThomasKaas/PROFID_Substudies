@@ -51,7 +51,8 @@ study3_raw_root <- function() {
     file.path(study3_repo_root(), "Study3"),
     study3_repo_root(),
     profid_data_path("Study3"),
-    profid_data_path("Data_Transfer_to_Charite", "Study3")
+    profid_data_path("Data_Transfer_to_Charite", "Study3"),
+    profid_data_path("Data_Transfer_to_Charite")
   )
 
   existing <- roots[dir.exists(roots)]
@@ -118,23 +119,81 @@ profid_dataset_path <- function(...) {
   profid_data_path("datasets", ...)
 }
 
+.study3_raw_alias_paths <- function(file) {
+  aliases <- list(
+    "eu-cert-icd.csv" = list(
+      profid_dataset_path("local", "eu-cert-icd", "data", "original",
+                          "registry_data_eu-cert-icd_selection_161019-Data-sheet.csv")
+    ),
+    "Helius.xlsx" = list(
+      profid_dataset_path("local", "helios-rdb", "data", "original",
+                          "Final_delivery.2021-05-20._Ali EDxlsx.xlsx"),
+      profid_dataset_path("local", "helios-rdb", "data", "processed",
+                          "hels-phase-1.xlsx")
+    ),
+    "israeli.csv" = list(
+      profid_dataset_path("local", "israeli-icd", "data", "original",
+                          "ICDALL_20170630.csv")
+    ),
+    "prose.xlsx" = list(
+      profid_dataset_path("local", "prose-icd", "data", "original",
+                          "FinaltoPROFID_PROSEonlysent_no_password.xlsx"),
+      profid_dataset_path("local", "prose-lvscd", "data", "original",
+                          "FinaltoPROFID_PROSEonlysent_no_password.xlsx")
+    ),
+    "LCV.xlsx" = list(
+      profid_dataset_path("local", "prose-lvscd", "data", "original",
+                          "FinaltoPROFID_LVSCDonlySent_no_password.xlsx"),
+      profid_dataset_path("local", "prose-icd", "data", "original",
+                          "FinaltoPROFID_LVSCDonlySent_no_password.xlsx")
+    ),
+    "PROSE_LCVcommon participant.csv" = list(
+      profid_dataset_path("local", "prose-icd", "data", "original",
+                          "FinaltoPROFID_PROSEonlysent_coenrolled.csv"),
+      profid_dataset_path("local", "prose-lvscd", "data", "original",
+                          "FinaltoPROFID_PROSEonlysent_coenrolled.csv")
+    )
+  )
+
+  out <- aliases[[file]]
+  if (is.null(out)) character(0) else unlist(out, use.names = FALSE)
+}
+
 study3_raw_path <- function(...) {
   parts <- c(...)
+  requested <- do.call(file.path, as.list(parts))
   roots <- unique(c(
     Sys.getenv("PROFID_STUDY3_RAW_ROOT", unset = ""),
     profid_data_path("raw", "Study3"),
     file.path(study3_repo_root(), "Study3"),
     study3_repo_root(),
     profid_data_path("Study3"),
-    profid_data_path("Data_Transfer_to_Charite", "Study3")
+    profid_data_path("Data_Transfer_to_Charite", "Study3"),
+    profid_data_path("Data_Transfer_to_Charite")
   ))
   roots <- roots[nzchar(roots)]
   candidates <- file.path(roots, do.call(file.path, as.list(parts)))
+  if (length(parts) == 1L) {
+    candidates <- c(candidates, .study3_raw_alias_paths(parts[[1]]))
+  }
 
   existing <- candidates[file.exists(candidates)]
   if (length(existing)) return(normalizePath(existing[[1]], winslash = "/", mustWork = FALSE))
 
-  candidates[[1]]
+  stop(
+    sprintf(
+      paste(
+        "Study3 raw input file not found: %s",
+        "Checked:",
+        "%s",
+        "Set PROFID_STUDY3_RAW_ROOT to the directory containing this file if it is stored elsewhere.",
+        sep = "\n"
+      ),
+      requested,
+      paste(sprintf("  - %s", candidates), collapse = "\n")
+    ),
+    call. = FALSE
+  )
 }
 
 study3_derived_path <- function(...) {
