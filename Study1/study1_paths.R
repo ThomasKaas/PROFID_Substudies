@@ -74,6 +74,31 @@ study1_output_path <- function(...) {
   file.path(study1_output_root(), ...)
 }
 
+study1_configure_headless_graphics <- function() {
+  if (!identical(.Platform$OS.type, "unix")) return(invisible(FALSE))
+  if (!identical(unname(Sys.info()[["sysname"]]), "Linux")) return(invisible(FALSE))
+
+  current_bitmap <- getOption("bitmapType", default = "")
+  has_display <- nzchar(Sys.getenv("DISPLAY", unset = ""))
+
+  if (isTRUE(capabilities("cairo")) &&
+      (!has_display || identical(current_bitmap, "Xlib"))) {
+    options(bitmapType = "cairo")
+    return(invisible(TRUE))
+  }
+
+  if (!has_display && !isTRUE(capabilities("cairo"))) {
+    warning(
+      "No graphical DISPLAY is available and this R build has no cairo support; PNG output may fail.",
+      call. = FALSE
+    )
+  }
+
+  invisible(FALSE)
+}
+
+study1_configure_headless_graphics()
+
 study1_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300) {
   dir.create(dirname(png_file), recursive = TRUE, showWarnings = FALSE)
   dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)
