@@ -247,13 +247,20 @@ install_missing_packages <- function(pkgs, ...) {
   package_aliases <- list(
     tidyverse = c("ggplot2", "dplyr", "tidyr", "readr", "purrr", "tibble",
                   "stringr", "forcats"),
-    ggsurvplot = "survminer"
+    ggsurvplot = character(0),
+    survminer = character(0)
   )
 
   pkgs <- unlist(lapply(unique(as.character(pkgs)), function(pkg) {
     if (pkg %in% names(package_aliases)) package_aliases[[pkg]] else pkg
   }), use.names = FALSE)
   pkgs <- unique(pkgs)
+  pkgs <- pkgs[nzchar(pkgs)]
+
+  if (!length(pkgs)) {
+    cat("No packages need installation for this request.\n")
+    return(invisible(NULL))
+  }
 
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
@@ -304,8 +311,9 @@ load_study1_package <- function(package, ..., character.only = FALSE) {
     return(invisible(TRUE))
   }
 
-  if (identical(pkg, "ggsurvplot")) {
-    pkg <- "survminer"
+  if (pkg %in% c("ggsurvplot", "survminer")) {
+    cat(sprintf("Skipping optional package '%s'; Study1 KM scripts do not require it.\n", pkg))
+    return(invisible(TRUE))
   }
 
   if (!requireNamespace(pkg, quietly = TRUE)) {
