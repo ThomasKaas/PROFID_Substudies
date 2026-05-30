@@ -71,7 +71,17 @@ study1_derived_path <- function(...) {
 }
 
 study1_output_path <- function(...) {
-  file.path(study1_output_root(), ...)
+  parts <- c(...)
+  root <- study1_output_root()
+
+  if (!length(parts)) return(root)
+
+  leaf <- basename(parts[[length(parts)]])
+  has_extension <- grepl("\\.[^./\\\\]+$", leaf)
+
+  if (!has_extension) return(root)
+
+  file.path(root, leaf)
 }
 
 study1_configure_headless_graphics <- function() {

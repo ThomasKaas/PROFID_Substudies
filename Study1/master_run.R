@@ -4,7 +4,7 @@
 #
 # Run from any working directory, for example:
 #   Rscript Study1/master_run.R
-#   ./Study1/run_master.sh
+#   ./Study1/run_study1.sh
 #   Rscript Study1/master_run.R --stage analysis
 #   Rscript Study1/master_run.R --from 3_clean --to 8_primary_cox
 #   Rscript Study1/master_run.R --dry-run
