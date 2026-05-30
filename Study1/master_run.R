@@ -4,6 +4,7 @@
 #
 # Run from any working directory, for example:
 #   Rscript Study1/master_run.R
+#   ./Study1/run_master.sh
 #   Rscript Study1/master_run.R --stage analysis
 #   Rscript Study1/master_run.R --from 3_clean --to 8_primary_cox
 #   Rscript Study1/master_run.R --dry-run
@@ -233,6 +234,30 @@ if (is.null(repos) || is.na(repos[["CRAN"]]) || identical(unname(repos[["CRAN"]]
   options(repos = c(CRAN = "https://cloud.r-project.org"))
 }
 
+r_libs_user <- Sys.getenv("STUDY1_R_LIBS_USER", unset = Sys.getenv("R_LIBS_USER", unset = ""))
+if (!nzchar(r_libs_user)) {
+  r_libs_user <- file.path("~", "R", paste0(R.version$platform, "-library"),
+                           paste(R.version$major, R.version$minor, sep = "."))
+}
+r_libs_user <- path.expand(r_libs_user)
+dir.create(r_libs_user, recursive = TRUE, showWarnings = FALSE)
+.libPaths(unique(c(r_libs_user, .libPaths())))
+
+install_missing_packages <- function(pkgs, ...) {
+  pkgs <- unique(as.character(pkgs))
+  missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
+
+  if (!length(missing)) {
+    cat(sprintf("All requested packages already available: %s\n",
+                paste(pkgs, collapse = ", ")))
+    return(invisible(NULL))
+  }
+
+  cat(sprintf("Installing missing package(s) into %s: %s\n",
+              r_libs_user, paste(missing, collapse = ", ")))
+  utils::install.packages(missing, lib = r_libs_user, ...)
+}
+
 missing_scripts <- selected$script[!file.exists(selected$script)]
 if (length(missing_scripts)) {
   stop(sprintf("Missing script(s): %s", paste(missing_scripts, collapse = ", ")),
@@ -241,6 +266,7 @@ if (length(missing_scripts)) {
 
 cat("Study1 master run\n")
 cat(sprintf("Repository root: %s\n", repo_root))
+cat(sprintf("R library path: %s\n", r_libs_user))
 cat(sprintf("Selected scripts: %d\n\n", nrow(selected)))
 
 for (j in seq_len(nrow(selected))) {
@@ -271,8 +297,9 @@ for (j in seq_len(nrow(selected))) {
 
   result <- tryCatch(
     {
-      sys.source(step$script[[1]], envir = new.env(parent = globalenv()),
-                 keep.source = FALSE)
+      step_env <- new.env(parent = globalenv())
+      step_env$install.packages <- install_missing_packages
+      sys.source(step$script[[1]], envir = step_env, keep.source = FALSE)
       NULL
     },
     error = function(e) e
