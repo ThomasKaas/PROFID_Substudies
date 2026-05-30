@@ -130,6 +130,27 @@ The fix in `Study3/09_Kaplan Maier and Fine Gray.R` makes that requirement expli
 
 In simple words: the script now removes records that have no usable time-at-risk before running survival and competing-risk functions. These records could not be analyzed by these methods anyway. No model formula, event definition, competing-risk definition, statistical method, or cohort rule was changed.
 
+## Headless Plot Saving In 180-Day Sensitivity Script
+
+The next HPC run reached `Study3/11_sensitivty analysis (180 days).R` and failed while saving the Kaplan-Meier sensitivity plot:
+
+```text
+Error: unable to start device PNG
+```
+
+This was an HPC graphics-device issue. The script used base R `png()` directly, but compute nodes often run without an interactive graphical display. The analysis had already completed up to the plot-saving step.
+
+The fix replaces the two direct `png()` calls in `Study3/11_sensitivty analysis (180 days).R` with the existing helper `study3_save_grid()` from `Study3/study3_paths.R`.
+
+In simple words:
+
+- the same Kaplan-Meier and cumulative-incidence plots are drawn
+- the same filenames for PNG outputs are used
+- a PDF copy is also written for each plot
+- the helper tries headless-safe graphics devices such as Cairo, `ragg`, or Ghostscript-backed bitmap output
+
+No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gray model, event coding, 180-day filter, plot contents, labels, colors, and line widths remain the same. Only the way the completed plots are written to disk was made compatible with the HPC environment.
+
 ## How To Check Paths On HPC
 
 From the repository root:

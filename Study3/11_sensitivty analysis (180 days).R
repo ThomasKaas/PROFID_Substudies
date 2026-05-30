@@ -137,19 +137,28 @@ logrank_sens_6mo <- survdiff(
 cat("\n--- Log-rank (>=180d) ---\n")
 print(logrank_sens_6mo)
 
-png(study3_output_path("figure_km_inapp_shock_by_device_sens_min180d.png"), width = 1400, height = 900, res = 160)
-plot(
-  km_sens_6mo,
-  col = c("red", "blue"),
-  lwd = 2,
-  xlab = "Days since ICD implantation",
-  ylab = "Event-free survival (inappropriate shock)",
-  mark.time = TRUE
+study3_save_grid(
+  draw = function() {
+    plot(
+      km_sens_6mo,
+      col = c("red", "blue"),
+      lwd = 2,
+      xlab = "Days since ICD implantation",
+      ylab = "Event-free survival (inappropriate shock)",
+      mark.time = TRUE
+    )
+    legend("bottomleft",
+           legend = levels(factor(dt_sens_6mo$device_group)),
+           col = c("red", "blue"), lwd = 2, bty = "n")
+  },
+  png_file = study3_output_path("figure_km_inapp_shock_by_device_sens_min180d.png"),
+  pdf_file = study3_output_path("figure_km_inapp_shock_by_device_sens_min180d.pdf"),
+  png_width = 1400,
+  png_height = 900,
+  png_res = 160,
+  pdf_width = 1400 / 160,
+  pdf_height = 900 / 160
 )
-legend("bottomleft",
-       legend = levels(factor(dt_sens_6mo$device_group)),
-       col = c("red", "blue"), lwd = 2, bty = "n")
-dev.off()
 
 ################################Fine–Gray competing risks — sensitivity (>=180d ##########################################
 dt_sens_6mo[, fg_event := 0L]
@@ -192,14 +201,23 @@ cif_sens_6mo <- with(
   cuminc(t_followup_days_final, fg_event, group = device_group)
 )
 
-png(study3_output_path("figure_cif_inapp_shock_by_device_sens_min180d.png"), width = 1400, height = 900, res = 160)
-plot(
-  cif_sens_6mo,
-  lwd = 2,
-  xlab = "Days since ICD implantation",
-  ylab = "Cumulative incidence (inappropriate shock)"
+study3_save_grid(
+  draw = function() {
+    plot(
+      cif_sens_6mo,
+      lwd = 2,
+      xlab = "Days since ICD implantation",
+      ylab = "Cumulative incidence (inappropriate shock)"
+    )
+  },
+  png_file = study3_output_path("figure_cif_inapp_shock_by_device_sens_min180d.png"),
+  pdf_file = study3_output_path("figure_cif_inapp_shock_by_device_sens_min180d.pdf"),
+  png_width = 1400,
+  png_height = 900,
+  png_res = 160,
+  pdf_width = 1400 / 160,
+  pdf_height = 900 / 160
 )
-dev.off()
 
 
 
