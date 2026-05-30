@@ -19,6 +19,33 @@ library (mice)
 dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 study3_add_inapp_shock_event(dt_final)
 
+valid_survival_input <- !is.na(dt_final$t_followup_days_final) &
+  is.finite(dt_final$t_followup_days_final) &
+  dt_final$t_followup_days_final > 0 &
+  !is.na(dt_final$device_group)
+
+if (any(!valid_survival_input)) {
+  cat(
+    "Excluding ",
+    sum(!valid_survival_input),
+    " row(s) with missing/non-positive follow-up or missing device group before KM/Fine-Gray analyses.\n",
+    sep = ""
+  )
+  print(
+    dt_final[
+      !valid_survival_input,
+      .N,
+      by = .(
+        dataset,
+        missing_followup = is.na(t_followup_days_final),
+        nonpositive_followup = !is.na(t_followup_days_final) & t_followup_days_final <= 0,
+        missing_device_group = is.na(device_group)
+      )
+    ][order(dataset)]
+  )
+  dt_final <- dt_final[valid_survival_input]
+}
+
 km_fit <- survfit(
   Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
   data = dt_final

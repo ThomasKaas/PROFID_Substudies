@@ -106,6 +106,30 @@ The helper is now called before saving `study3_analysis_final.rds` in `Study3/07
 
 This does not change any statistical analysis logic, model formula, filtering rule, covariate set, endpoint definition, or transformation. It only makes the pre-existing endpoint derivation reusable and persistent across the pipeline.
 
+## KM/Fine-Gray Follow-Up Check
+
+After the endpoint persistence fix, the HPC run reached `Study3/09_Kaplan Maier and Fine Gray.R` and then failed with:
+
+```text
+Error: all(!is.na(dt_final$t_followup_days_final)) is not TRUE
+```
+
+This was another data-contract issue. `study3_analysis_final.rds` is also used for descriptive output and can still contain rows where final follow-up time is missing or not usable for time-to-event analysis. Those rows cannot contribute to Kaplan-Meier, log-rank, Fine-Gray, or cumulative-incidence calculations because all of those require a valid positive follow-up time.
+
+`Study3/08_Cox models.R` already applies the same analysis-readiness requirement before Cox modelling:
+
+```r
+dt <- dt[t_followup_days_final > 0]
+```
+
+The fix in `Study3/09_Kaplan Maier and Fine Gray.R` makes that requirement explicit before the KM/Fine-Gray analyses:
+
+- keep only rows with non-missing, finite, positive `t_followup_days_final`
+- keep only rows with non-missing `device_group`
+- print a small QC table showing any excluded rows by dataset and reason
+
+In simple words: the script now removes records that have no usable time-at-risk before running survival and competing-risk functions. These records could not be analyzed by these methods anyway. No model formula, event definition, competing-risk definition, statistical method, or cohort rule was changed.
+
 ## How To Check Paths On HPC
 
 From the repository root:
