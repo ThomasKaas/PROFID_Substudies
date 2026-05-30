@@ -244,7 +244,17 @@ dir.create(r_libs_user, recursive = TRUE, showWarnings = FALSE)
 .libPaths(unique(c(r_libs_user, .libPaths())))
 
 install_missing_packages <- function(pkgs, ...) {
-  pkgs <- unique(as.character(pkgs))
+  package_aliases <- list(
+    tidyverse = c("ggplot2", "dplyr", "tidyr", "readr", "purrr", "tibble",
+                  "stringr", "forcats"),
+    ggsurvplot = "survminer"
+  )
+
+  pkgs <- unlist(lapply(unique(as.character(pkgs)), function(pkg) {
+    if (pkg %in% names(package_aliases)) package_aliases[[pkg]] else pkg
+  }), use.names = FALSE)
+  pkgs <- unique(pkgs)
+
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
   if (!length(missing)) {
@@ -256,6 +266,35 @@ install_missing_packages <- function(pkgs, ...) {
   cat(sprintf("Installing missing package(s) into %s: %s\n",
               r_libs_user, paste(missing, collapse = ", ")))
   utils::install.packages(missing, lib = r_libs_user, ...)
+}
+
+load_study1_package <- function(package, ..., character.only = FALSE) {
+  pkg <- if (character.only) {
+    as.character(package)
+  } else {
+    as.character(substitute(package))
+  }
+
+  if (identical(pkg, "tidyverse")) {
+    core <- c("ggplot2", "dplyr", "tidyr", "readr", "purrr", "tibble",
+              "stringr", "forcats")
+    missing <- core[!vapply(core, requireNamespace, logical(1), quietly = TRUE)]
+    if (length(missing)) install_missing_packages(missing)
+
+    for (core_pkg in core) {
+      base::library(core_pkg, character.only = TRUE, ...)
+    }
+    return(invisible(TRUE))
+  }
+
+  if (identical(pkg, "ggsurvplot")) {
+    pkg <- "survminer"
+  }
+
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    install_missing_packages(pkg)
+  }
+  base::library(pkg, character.only = TRUE, ...)
 }
 
 missing_scripts <- selected$script[!file.exists(selected$script)]
@@ -299,6 +338,7 @@ for (j in seq_len(nrow(selected))) {
     {
       step_env <- new.env(parent = globalenv())
       step_env$install.packages <- install_missing_packages
+      step_env$library <- load_study1_package
       sys.source(step$script[[1]], envir = step_env, keep.source = FALSE)
       NULL
     },
