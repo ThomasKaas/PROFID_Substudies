@@ -257,6 +257,23 @@ install_missing_packages <- function(pkgs, ...) {
 
   missing <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 
+  if ("gt" %in% missing) {
+    gt_deps <- c("base64enc", "bitops", "cli", "commonmark", "dplyr", "fs",
+                 "ggplot2", "glue", "htmltools", "magrittr", "rlang", "sass",
+                 "scales", "stringr", "tibble", "tidyselect")
+    gt_missing_deps <- gt_deps[!vapply(gt_deps, requireNamespace, logical(1), quietly = TRUE)]
+    if (length(gt_missing_deps)) {
+      cat(sprintf("Installing archived gt dependency package(s) into %s: %s\n",
+                  r_libs_user, paste(gt_missing_deps, collapse = ", ")))
+      utils::install.packages(gt_missing_deps, lib = r_libs_user, ...)
+    }
+
+    gt_archive_url <- "https://cran.r-project.org/src/contrib/Archive/gt/gt_0.7.0.tar.gz"
+    cat(sprintf("Installing gt 0.7.0 from CRAN archive into %s\n", r_libs_user))
+    utils::install.packages(gt_archive_url, lib = r_libs_user, repos = NULL, type = "source")
+    missing <- setdiff(missing, "gt")
+  }
+
   if (!length(missing)) {
     cat(sprintf("All requested packages already available: %s\n",
                 paste(pkgs, collapse = ", ")))
