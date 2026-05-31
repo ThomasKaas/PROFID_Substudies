@@ -23,6 +23,15 @@ Instructions here
 
 Usage examples.
 
+For a project-wide, metadata-only overview of available variables and approximate observation counts across raw/source/CDM datasets and substudy groups, run the data structure inventory described in [Repo-Structure.md](Repo-Structure.md). On the HPC, the standard command is:
+
+```bash
+cd /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies
+PROFID_REPO_ROOT="$PWD" sbatch tools/run_profid_data_structure_inventory.sh
+```
+
+The inventory output is written to `/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure/` and contains aggregate structure and availability metadata only, not individual patient data.
+
 # Project descriptions
 Study 1- Is Inappropriate ICD Therapy Associated with Higher Mortality? A Comparison in Patients with and without Inappropriate ICD Interventions (Analytical lead: Nishat Girkar)
 
@@ -51,4 +60,3 @@ TBA
 
  ![Project Logo2](assets/image2.png) ![Project Logo3](assets/image3.jpg)  
 ```
-

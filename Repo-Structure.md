@@ -81,6 +81,103 @@ The key convention is:
 
 where `<stage>` is usually one of `original`, `dictionary`, `processed`, or `working`.
 
+## Data structure and availability inventory
+
+The repository contains an HPC-ready inventory workflow that scans the PROFID source-data tree and writes aggregate metadata about which variables are available where. It is designed for planning analyses across studies and substudy groups, not for exporting individual patient data.
+
+Main files:
+
+| File | Purpose |
+| --- | --- |
+| `tools/profid_data_structure_inventory.R` | Scans supported raw/source/CDM tables, records column-level structure, classifies likely covariates/outcomes, and computes aggregate non-missing/missing counts where possible. |
+| `tools/run_profid_data_structure_inventory.sh` | Slurm wrapper for the R script. It loads `R/4.5.0`, sets the HPC data root, writes logs, uses resume mode, and runs the inventory from the repository root. |
+| `config/profid_substudy_sources.csv` | Maps source datasets and data stages to substudy labels for substudy-level availability summaries. Edit this file if the substudy grouping changes. |
+
+Recommended HPC command:
+
+```bash
+cd /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies
+PROFID_REPO_ROOT="$PWD" sbatch tools/run_profid_data_structure_inventory.sh
+```
+
+The wrapper defaults to:
+
+```text
+PROFID_DATA_ROOT=/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data
+PROFID_INVENTORY_OUT_DIR=${PROFID_DATA_ROOT}/derived/data_structure
+PROFID_INVENTORY_MAX_FULL_READ_MB=4096
+PROFID_INVENTORY_CHUNK_ROWS=100000
+```
+
+These defaults can be overridden at submission time, for example:
+
+```bash
+PROFID_DATA_ROOT=/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data \
+PROFID_INVENTORY_MAX_FULL_READ_MB=2048 \
+sbatch tools/run_profid_data_structure_inventory.sh
+```
+
+The output directory is:
+
+```text
+/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure/
+```
+
+Expected output files:
+
+| Output file | Contents |
+| --- | --- |
+| `profid_data_structure_master.csv` | One row per source column, sheet, or object where readable. Includes source dataset, data stage, relative file path, table dimensions, column name, normalized variable name, inferred role, domain guess, and aggregate missingness counts. |
+| `profid_covariate_observation_points.csv` | Column-level rows from observation-source tables classified as covariates, including approximate non-missing observation counts. |
+| `profid_outcome_observation_points.csv` | Column-level rows from observation-source tables classified as outcomes, including approximate non-missing observation counts. |
+| `profid_variable_availability_by_dataset.csv` | Aggregated availability by source dataset, data stage, normalized variable, inferred role, and domain. |
+| `profid_variable_availability_by_substudy.csv` | Aggregated availability by substudy group, normalized variable, inferred role, and domain using `config/profid_substudy_sources.csv`. |
+| `profid_inventory_read_status_summary.csv` | Counts of read statuses such as successful reads, skipped large files, unsupported file types, or read errors. |
+| `profid_inventory_reader_package_status.csv` | Availability of optional R reader packages on the compute node. |
+
+The availability estimates are approximate planning counts. For readable tabular files, `nonmissing_n`, `missing_n`, `nonmissing_pct`, and table row counts are computed by column. For very large files above `PROFID_INVENTORY_MAX_FULL_READ_MB`, the script may record structure only or skip files that cannot be safely inspected without loading the full object, especially large `.rds` objects. The read-status summary should therefore be checked before interpreting the totals.
+
+Privacy boundary:
+
+The inventory outputs contain metadata only: file paths relative to `data_root`, sheet/object names, column names, inferred variable roles/domains, row/column counts, and missingness counts. They do not contain patient-level rows, patient identifiers, raw values, value examples, category frequencies, min/max values, or date ranges. The outputs should still be treated as internal project metadata because variable names and dataset paths can reveal study structure, but they are not individual patient data.
+
+Monitoring commands:
+
+```bash
+squeue -j <JOBID>
+scontrol show job <JOBID> | egrep 'JobName|Command|WorkDir|StdOut|StdErr|ReqMem|RunTime|Partition'
+tail -f profid_inventory_<JOBID>.log
+ls -lh /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure/
+```
+
+When the wrapper is run directly with `bash tools/run_profid_data_structure_inventory.sh`, it self-submits to Slurm and places the log under:
+
+```text
+/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure/logs/
+```
+
+When it is submitted directly with `sbatch tools/run_profid_data_structure_inventory.sh`, Slurm uses the static `#SBATCH` log pattern and usually writes `profid_inventory_<JOBID>.log` in the submit directory.
+
+Resume behavior:
+
+The Slurm wrapper runs the R script with `--resume yes`. If a job is interrupted or the SSH session drops, resubmitting the same command continues from the existing `profid_data_structure_master.csv` and skips already-inventoried top-level files. If the master CSV schema is incompatible with the current script, the old file is moved to a timestamped backup and a new inventory is started.
+
+Direct R invocation, useful for debugging on an interactive node:
+
+```bash
+module load R/4.5.0
+Rscript /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/tools/profid_data_structure_inventory.R \
+  --data-root /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data \
+  --repo-root /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies \
+  --out-dir /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure \
+  --scope source_plus_cdm \
+  --include-archives yes \
+  --include-availability yes \
+  --max-full-read-mb 4096 \
+  --chunk-rows 100000 \
+  --resume yes
+```
+
 ## Dataset folders
 
 The listing contains these dataset folders under `datasets/local/`:
@@ -227,4 +324,3 @@ IN_DICT_XLSX <- file.path(
 4. Separate inputs from outputs: raw and curated data under `data_root`, generated tables/figures/models under `output_root`, reusable derived datasets under `data_root/derived`.
 5. Normalize inconsistent study names: use `Study1`, `Study4`, `Study5`, `Study6`, `Study8`, and `Study9` rather than mixed forms such as `Study_1`, `study_4`, `study4`, or `studyears_4`.
 6. Keep paths with spaces only when they already correspond to real data-delivery folders. For new HPC output folders, prefer stable names without spaces if changing downstream references is feasible.
-
