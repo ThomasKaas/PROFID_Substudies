@@ -101,6 +101,37 @@ resolve_roots <- function() {
 }
 
 roots <- resolve_roots()
+
+is_placeholder_path <- function(path) {
+  grepl("^/pfad/zum|^/path/to", path)
+}
+
+if (is_placeholder_path(roots$data_root) || is_placeholder_path(roots$output_root)) {
+  stop(
+    paste(
+      "PROFID_DATA_ROOT/PROFID_OUTPUT_ROOT still contain example placeholder paths.",
+      "Set them to the real mounted HPC directories before running.",
+      "Example discovery command:",
+      "find /sc-projects -type d -name Data_Transfer_to_Charite 2>/dev/null | head",
+      sep = "\n"
+    ),
+    call. = FALSE
+  )
+}
+
+if (!dir.exists(roots$transfer_dir)) {
+  stop(
+    paste(
+      "Transfer directory does not exist:",
+      roots$transfer_dir,
+      "Set --data-root to the parent directory that contains Data_Transfer_to_Charite,",
+      "or pass --transfer-dir directly.",
+      sep = "\n"
+    ),
+    call. = FALSE
+  )
+}
+
 dir.create(roots$out_dir, recursive = TRUE, showWarnings = FALSE)
 
 message("Data root: ", roots$data_root)
