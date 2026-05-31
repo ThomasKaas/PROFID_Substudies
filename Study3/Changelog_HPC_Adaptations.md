@@ -158,7 +158,7 @@ No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gr
 - x-axis display is limited to 3,000 days
 - y-axis display is truncated to 0.50-1.00 event-free survival for Figure 1 presentation
 - single-chamber ICD is drawn as a blue solid curve and dual-chamber ICD as a red dashed curve
-- curve line widths are reduced so censoring tick marks remain visible
+- curve line widths are reduced and censoring tick marks are drawn manually as short, thin vertical marks so the KM trend lines remain clearly visible
 - a number-at-risk table is drawn below the Kaplan-Meier curves, styled as a separate lower panel in line with the Study 1 Kaplan-Meier figure
 - PNG and PDF copies are written to `Study3/outputs`
 - the quantitative data behind the plot are also exported to CSV files in `Study3/outputs`, so the figure can be reloaded and replotted independently

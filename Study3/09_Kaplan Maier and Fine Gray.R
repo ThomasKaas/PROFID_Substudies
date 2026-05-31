@@ -194,6 +194,8 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000,
   risk_label_cex <- 0.93
   risk_group_cex <- 0.86
   risk_number_cex <- 1.03
+  censor_tick_half_height <- 0.004
+  censor_tick_lwd <- 0.45
   logrank_label <- paste0("Log-rank p = ", study3_format_p(logrank_p))
 
   old_par <- par(no.readonly = TRUE)
@@ -213,12 +215,40 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000,
     ylim = c(0.5, 1.0),
     xaxt = "n",
     yaxt = "n",
-    mark.time = TRUE,
-    mark = "|",
+    mark.time = FALSE,
     conf.int = FALSE,
     cex.axis = main_axis_cex,
     cex.lab = main_label_cex
   )
+  censor_summary <- summary(fit, censored = TRUE)
+  if (length(censor_summary$time)) {
+    censor_strata <- sub("^device_group=", "", as.character(censor_summary$strata))
+    if (length(censor_strata) == 0L && length(labels) == 1L) {
+      censor_strata <- rep(labels, length(censor_summary$time))
+    }
+
+    for (i in seq_along(labels)) {
+      tick_idx <- which(
+        censor_strata == labels[[i]] &
+          censor_summary$n.censor > 0 &
+          censor_summary$time >= 0 &
+          censor_summary$time <= x_limit &
+          !is.na(censor_summary$surv)
+      )
+
+      if (length(tick_idx)) {
+        segments(
+          x0 = censor_summary$time[tick_idx],
+          y0 = pmax(0.5, censor_summary$surv[tick_idx] - censor_tick_half_height),
+          x1 = censor_summary$time[tick_idx],
+          y1 = pmin(1.0, censor_summary$surv[tick_idx] + censor_tick_half_height),
+          col = curve_col[[i]],
+          lwd = censor_tick_lwd,
+          lend = "butt"
+        )
+      }
+    }
+  }
   axis(2, at = seq(0.5, 1.0, by = 0.05), las = 1, cex.axis = main_axis_cex)
   axis(1, at = x_breaks, labels = FALSE, tck = -0.015)
   title(
