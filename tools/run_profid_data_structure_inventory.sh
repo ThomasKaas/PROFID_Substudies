@@ -11,8 +11,25 @@
 
 set -euo pipefail
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd "${script_dir}/.." && pwd)"
+DEFAULT_REPO_ROOT="/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies"
+
+if [ -n "${PROFID_REPO_ROOT:-}" ] && [ -f "${PROFID_REPO_ROOT}/tools/profid_data_structure_inventory.R" ]; then
+  repo_root="${PROFID_REPO_ROOT}"
+elif [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/tools/profid_data_structure_inventory.R" ]; then
+  repo_root="${SLURM_SUBMIT_DIR}"
+elif [ -f "${DEFAULT_REPO_ROOT}/tools/profid_data_structure_inventory.R" ]; then
+  repo_root="${DEFAULT_REPO_ROOT}"
+else
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  repo_root="$(cd "${script_dir}/.." && pwd)"
+fi
+
+if [ ! -f "${repo_root}/tools/profid_data_structure_inventory.R" ]; then
+  echo "ERROR: Could not find tools/profid_data_structure_inventory.R under repo root: ${repo_root}" >&2
+  echo "Set PROFID_REPO_ROOT=/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies or submit from the repository root." >&2
+  exit 2
+fi
+
 cd "${repo_root}"
 
 PROFID_DATA_ROOT="${PROFID_DATA_ROOT:-/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data}"
@@ -60,7 +77,7 @@ echo "TMPDIR: ${TMPDIR}"
 echo "Max full-read MB: ${MAX_FULL_READ_MB}"
 echo "Chunk rows: ${CHUNK_ROWS}"
 
-Rscript tools/profid_data_structure_inventory.R \
+Rscript "${repo_root}/tools/profid_data_structure_inventory.R" \
   --data-root "${PROFID_DATA_ROOT}" \
   --repo-root "${repo_root}" \
   --out-dir "${OUT_DIR}" \
