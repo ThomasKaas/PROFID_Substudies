@@ -158,6 +158,7 @@ No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gr
 - x-axis display is limited to 3,000 days
 - a number-at-risk table is drawn below the Kaplan-Meier curves, styled as a separate lower panel in line with the Study 1 Kaplan-Meier figure
 - PNG and PDF copies are written to `Study3/outputs`
+- the quantitative data behind the plot are also exported to CSV files in `Study3/outputs`, so the figure can be reloaded and replotted independently
 - the original visual design is kept: red and blue solid Kaplan-Meier curves, line width 2, same y-axis label, and bottom-left legend placement
 
 This is an output-only plotting adaptation. It does not change the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray event coding, Fine-Gray model, cumulative-incidence analysis, or any statistical result.

@@ -506,8 +506,11 @@ Main outputs:
 
 - `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
 - `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
+- `figure_1_km_curve_data_3000d.csv`
+- `figure_1_km_number_at_risk_long_3000d.csv`
+- `figure_1_km_number_at_risk_wide_3000d.csv`
 
-The Figure 1 changes are output-only. They do not modify the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray model, or cumulative-incidence analysis.
+The Figure 1 changes are output-only. The CSV exports contain the Kaplan-Meier curve/censor/event data and the number-at-risk table used for the plot, so the figure can be reloaded and replotted independently. They do not modify the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray model, or cumulative-incidence analysis.
 
 Important reproducibility issue:
 
@@ -771,6 +774,9 @@ Kaplan-Meier / Fine-Gray outputs:
 
 - `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
 - `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
+- `figure_1_km_curve_data_3000d.csv`
+- `figure_1_km_number_at_risk_long_3000d.csv`
+- `figure_1_km_number_at_risk_wide_3000d.csv`
 
 Intermediate or expected files not produced in this checkout:
 

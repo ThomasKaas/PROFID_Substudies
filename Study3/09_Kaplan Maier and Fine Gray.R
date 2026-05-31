@@ -81,6 +81,93 @@ study3_km_risk_table <- function(fit, times, labels) {
   risk_table
 }
 
+study3_km_risk_table_long <- function(fit, times, labels) {
+  risk_table <- study3_km_risk_table(fit, times, labels)
+
+  data.table(
+    device_group = rep(rownames(risk_table), each = length(times)),
+    time_days = rep(times, times = nrow(risk_table)),
+    n_risk = as.integer(as.vector(t(risk_table)))
+  )
+}
+
+study3_km_curve_data <- function(fit, labels, x_limit = 3000) {
+  curve_summary <- summary(fit, censored = TRUE)
+  initial_risk <- study3_km_risk_table(fit, 0, labels)
+
+  initial_dt <- data.table(
+    device_group = labels,
+    time_days = 0,
+    n_risk = as.integer(initial_risk[, "0"]),
+    n_event = 0L,
+    n_censor = 0L,
+    survival = 1,
+    std_error = 0,
+    lower_95 = 1,
+    upper_95 = 1
+  )
+
+  if (length(curve_summary$time) == 0L) {
+    return(initial_dt)
+  }
+
+  strata_labels <- sub("^device_group=", "", as.character(curve_summary$strata))
+  if (length(strata_labels) == 0L && length(labels) == 1L) {
+    strata_labels <- rep(labels, length(curve_summary$time))
+  }
+
+  curve_dt <- data.table(
+    device_group = strata_labels,
+    time_days = curve_summary$time,
+    n_risk = curve_summary$n.risk,
+    n_event = curve_summary$n.event,
+    n_censor = curve_summary$n.censor,
+    survival = curve_summary$surv,
+    std_error = curve_summary$std.err,
+    lower_95 = curve_summary$lower,
+    upper_95 = curve_summary$upper
+  )
+
+  curve_dt <- rbind(initial_dt, curve_dt, fill = TRUE)
+  curve_dt[time_days <= x_limit][order(device_group, time_days)]
+}
+
+study3_export_figure1_data <- function(fit, labels, x_limit = 3000) {
+  x_breaks <- seq(0, x_limit, by = 500)
+  out_dir <- study3_output_path()
+  dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+  curve_dt <- study3_km_curve_data(fit, labels, x_limit)
+  risk_long <- study3_km_risk_table_long(fit, x_breaks, labels)
+  risk_wide <- dcast(risk_long, device_group ~ time_days, value.var = "n_risk")
+  setnames(
+    risk_wide,
+    old = setdiff(names(risk_wide), "device_group"),
+    new = paste0("day_", setdiff(names(risk_wide), "device_group"))
+  )
+
+  fwrite(
+    curve_dt,
+    study3_output_path("figure_1_km_curve_data_3000d.csv")
+  )
+  fwrite(
+    risk_long,
+    study3_output_path("figure_1_km_number_at_risk_long_3000d.csv")
+  )
+  fwrite(
+    risk_wide,
+    study3_output_path("figure_1_km_number_at_risk_wide_3000d.csv")
+  )
+
+  invisible(
+    list(
+      curve_data = curve_dt,
+      number_at_risk_long = risk_long,
+      number_at_risk_wide = risk_wide
+    )
+  )
+}
+
 study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
   x_breaks <- seq(0, x_limit, by = 500)
   risk_table <- study3_km_risk_table(fit, x_breaks, labels)
@@ -169,6 +256,12 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
 
 km_labels <- sub("^device_group=", "", names(km_fit$strata))
 if (!length(km_labels)) km_labels <- levels(factor(dt_final$device_group))
+
+study3_export_figure1_data(
+  fit = km_fit,
+  labels = km_labels,
+  x_limit = 3000
+)
 
 study3_save_grid(
   draw = function() {
