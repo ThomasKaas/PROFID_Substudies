@@ -23,6 +23,7 @@ print_usage <- function() {
     "  --transfer-dir    Override transfer directory directly.\n",
     "  --out-dir         Override final output directory directly.\n",
     "  --date-stamp      yes/no; append timestamp to default out-dir. Default yes.\n",
+    "  --make-plots      yes/no; write PNG diagnostic plots. Default yes.\n",
     "  --help            Show this message.\n",
     sep = ""
   )
@@ -65,6 +66,72 @@ if (length(missing_packages)) {
   )
 }
 
+save_png_headless <- function(plot, filename, width, height, dpi = 150) {
+  dir.create(dirname(filename), recursive = TRUE, showWarnings = FALSE)
+
+  valid_png <- function(path) {
+    file.exists(path) && !is.na(file.info(path)$size) && file.info(path)$size > 0
+  }
+
+  try_save <- function(expr) {
+    if (file.exists(filename)) unlink(filename)
+    ok <- tryCatch(
+      {
+        suppressWarnings(force(expr))
+        TRUE
+      },
+      error = function(e) FALSE
+    )
+    ok && valid_png(filename)
+  }
+
+  if (requireNamespace("ragg", quietly = TRUE)) {
+    if (try_save(ggplot2::ggsave(
+      filename,
+      plot = plot,
+      device = ragg::agg_png,
+      width = width,
+      height = height,
+      units = "in",
+      dpi = dpi
+    ))) {
+      return(invisible(TRUE))
+    }
+  }
+
+  if (isTRUE(capabilities("cairo"))) {
+    cairo_png <- function(filename, width, height, units, res, ...) {
+      grDevices::png(
+        filename = filename,
+        width = width,
+        height = height,
+        units = units,
+        res = res,
+        type = "cairo-png",
+        ...
+      )
+    }
+    if (try_save(ggplot2::ggsave(
+      filename,
+      plot = plot,
+      device = cairo_png,
+      width = width,
+      height = height,
+      units = "in",
+      dpi = dpi
+    ))) {
+      return(invisible(TRUE))
+    }
+  }
+
+  warning(
+    "Skipping PNG plot because neither ragg nor Cairo PNG support is available: ",
+    filename,
+    call. = FALSE
+  )
+  invisible(FALSE)
+}
+
 timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
 
 resolve_roots <- function() {
@@ -101,6 +168,7 @@ resolve_roots <- function() {
 }
 
 roots <- resolve_roots()
+make_plots <- yes_arg("make-plots", TRUE)
 
 is_placeholder_path <- function(path) {
   grepl("^/pfad/zum|^/path/to", path)
@@ -137,6 +205,7 @@ dir.create(roots$out_dir, recursive = TRUE, showWarnings = FALSE)
 message("Data root: ", roots$data_root)
 message("Transfer dir: ", roots$transfer_dir)
 message("Output dir: ", roots$out_dir)
+message("Make plots: ", make_plots)
 
 read_any_table <- function(path) {
   ext <- tolower(tools::file_ext(path))
@@ -897,27 +966,31 @@ if ("Time_zero_Y" %in% names(nonicd_data)) {
 
 plot_df <- nonicd_data
 plot_df$DB_plot <- db_value(plot_df)
-if ("Survival_time" %in% names(plot_df)) {
-  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = as_num_safely(Survival_time))) +
-    ggplot2::geom_histogram(bins = 40, na.rm = TRUE) +
-    ggplot2::facet_wrap(ggplot2::vars(DB_plot), scales = "free_y") +
-    ggplot2::labs(x = "Survival_time", y = "N")
-  ggplot2::ggsave(file.path(roots$out_dir, "survival_time_distribution_by_db.png"), p, width = 10, height = 7, dpi = 150)
-}
-if ("LVEF" %in% names(plot_df)) {
-  p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = lvef_percent(LVEF))) +
-    ggplot2::geom_histogram(bins = 40, na.rm = TRUE) +
-    ggplot2::facet_wrap(ggplot2::vars(DB_plot), scales = "free_y") +
-    ggplot2::labs(x = "LVEF", y = "N")
-  ggplot2::ggsave(file.path(roots$out_dir, "lvef_distribution_by_db.png"), p, width = 10, height = 7, dpi = 150)
-}
-if (nrow(missingness_by_idea)) {
-  p <- ggplot2::ggplot(missingness_by_idea, ggplot2::aes(x = variable, y = idea, fill = missing_pct)) +
-    ggplot2::geom_tile() +
-    ggplot2::scale_fill_viridis_c(option = "C", na.value = "grey80") +
-    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
-    ggplot2::labs(x = NULL, y = NULL, fill = "Missing")
-  ggplot2::ggsave(file.path(roots$out_dir, "missingness_heatmap_by_idea.png"), p, width = 10, height = 5, dpi = 150)
+if (make_plots) {
+  if ("Survival_time" %in% names(plot_df)) {
+    p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = as_num_safely(Survival_time))) +
+      ggplot2::geom_histogram(bins = 40, na.rm = TRUE) +
+      ggplot2::facet_wrap(ggplot2::vars(DB_plot), scales = "free_y") +
+      ggplot2::labs(x = "Survival_time", y = "N")
+    save_png_headless(p, file.path(roots$out_dir, "survival_time_distribution_by_db.png"), width = 10, height = 7, dpi = 150)
+  }
+  if ("LVEF" %in% names(plot_df)) {
+    p <- ggplot2::ggplot(plot_df, ggplot2::aes(x = lvef_percent(LVEF))) +
+      ggplot2::geom_histogram(bins = 40, na.rm = TRUE) +
+      ggplot2::facet_wrap(ggplot2::vars(DB_plot), scales = "free_y") +
+      ggplot2::labs(x = "LVEF", y = "N")
+    save_png_headless(p, file.path(roots$out_dir, "lvef_distribution_by_db.png"), width = 10, height = 7, dpi = 150)
+  }
+  if (nrow(missingness_by_idea)) {
+    p <- ggplot2::ggplot(missingness_by_idea, ggplot2::aes(x = variable, y = idea, fill = missing_pct)) +
+      ggplot2::geom_tile() +
+      ggplot2::scale_fill_viridis_c(option = "C", na.value = "grey80") +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)) +
+      ggplot2::labs(x = NULL, y = NULL, fill = "Missing")
+    save_png_headless(p, file.path(roots$out_dir, "missingness_heatmap_by_idea.png"), width = 10, height = 5, dpi = 150)
+  }
+} else {
+  message("Skipping diagnostic PNG plots because --make-plots no was set.")
 }
 
 input_paths <- c(
