@@ -87,15 +87,22 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
   n_groups <- length(labels)
   curve_col <- rep(c("red", "blue"), length.out = n_groups)
   curve_lty <- rep(1, n_groups)
-  left_margin <- 13.5
-  risk_label_x <- -0.06 * x_limit
+  left_margin <- 11.0
+  risk_label_x <- -0.045 * x_limit
+  main_axis_cex <- 1.08
+  main_label_cex <- 1.08
+  legend_cex <- 1.05
+  risk_axis_cex <- 1.02
+  risk_label_cex <- 0.93
+  risk_group_cex <- 0.86
+  risk_number_cex <- 1.03
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par), add = TRUE)
 
   layout(matrix(c(1, 2), nrow = 2), heights = c(3.3, 1.5))
 
-  par(mar = c(0.3, left_margin, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
+  par(mar = c(0.3, left_margin, 1.4, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
   plot(
     fit,
     col = curve_col,
@@ -106,7 +113,9 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
     xlim = c(0, x_limit),
     xaxt = "n",
     mark.time = TRUE,
-    conf.int = FALSE
+    conf.int = FALSE,
+    cex.axis = main_axis_cex,
+    cex.lab = main_label_cex
   )
   axis(1, at = x_breaks, labels = FALSE, tck = -0.015)
   legend(
@@ -116,30 +125,31 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
     lty = curve_lty,
     lwd = 2,
     bty = "n",
-    inset = 0.01
+    inset = 0.01,
+    cex = legend_cex
   )
 
   par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
   plot(
     NA,
     xlim = c(0, x_limit),
-    ylim = c(0, n_groups + 1.6),
+    ylim = c(0, n_groups + 1.45),
     axes = FALSE,
     xlab = "",
     ylab = ""
   )
-  axis(1, at = x_breaks, labels = x_breaks, tck = -0.06, line = 0, cex.axis = 0.9)
-  mtext("Days since ICD implantation", side = 1, line = 2.0, cex = 0.95)
+  axis(1, at = x_breaks, labels = x_breaks, tck = -0.06, line = 0, cex.axis = risk_axis_cex)
+  mtext("Days since ICD implantation", side = 1, line = 2.0, cex = 1.05)
 
-  row_y <- rev(seq_len(n_groups))
+  row_y <- rev(seq_len(n_groups)) * 0.78 + 0.35
   par(xpd = NA)
   text(
     risk_label_x,
-    n_groups + 0.95,
+    max(row_y) + 0.90,
     "Number\nat risk",
     adj = 1,
     font = 1,
-    cex = 0.85,
+    cex = risk_label_cex,
     col = "grey30"
   )
   text(
@@ -147,12 +157,12 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
     row_y,
     labels,
     adj = 1,
-    cex = 0.78,
+    cex = risk_group_cex,
     col = curve_col
   )
 
   for (j in seq_along(x_breaks)) {
-    text(x_breaks[[j]], row_y, risk_table[, j], cex = 0.9)
+    text(x_breaks[[j]], row_y, risk_table[, j], cex = risk_number_cex)
   }
   par(xpd = FALSE)
 }
