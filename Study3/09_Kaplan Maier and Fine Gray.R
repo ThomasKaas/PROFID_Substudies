@@ -51,10 +51,17 @@ km_fit <- survfit(
   data = dt_final
 )
 
-survdiff(
+logrank_fit <- survdiff(
   Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
   data = dt_final
 )
+logrank_fit
+
+study3_format_p <- function(p) {
+  if (is.na(p)) return("NA")
+  if (p < 0.001) return("<0.001")
+  sprintf("%.2f", p)
+}
 
 study3_km_risk_table <- function(fit, times, labels) {
   risk_summary <- summary(fit, times = times, extend = TRUE)
@@ -168,52 +175,96 @@ study3_export_figure1_data <- function(fit, labels, x_limit = 3000) {
   )
 }
 
-study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
+study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000,
+                                           logrank_p = NA_real_) {
   x_breaks <- seq(0, x_limit, by = 500)
   risk_table <- study3_km_risk_table(fit, x_breaks, labels)
   n_groups <- length(labels)
-  curve_col <- rep(c("red", "blue"), length.out = n_groups)
-  curve_lty <- rep(1, n_groups)
+  is_dual <- grepl("dual", labels, ignore.case = TRUE)
+  curve_col <- ifelse(is_dual, "#C00000", "#003F9E")
+  curve_lty <- ifelse(is_dual, 2, 1)
+  legend_order <- c(which(!is_dual), which(is_dual))
+  if (!length(legend_order)) legend_order <- seq_along(labels)
   left_margin <- 11.0
   risk_label_x <- -0.045 * x_limit
   main_axis_cex <- 1.08
   main_label_cex <- 1.08
-  legend_cex <- 1.05
+  legend_cex <- 0.96
   risk_axis_cex <- 1.02
   risk_label_cex <- 0.93
   risk_group_cex <- 0.86
   risk_number_cex <- 1.03
+  logrank_label <- paste0("Log-rank p = ", study3_format_p(logrank_p))
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par), add = TRUE)
 
   layout(matrix(c(1, 2), nrow = 2), heights = c(3.3, 1.5))
 
-  par(mar = c(0.3, left_margin, 1.4, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
+  par(mar = c(0.5, left_margin, 4.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
   plot(
     fit,
     col = curve_col,
     lty = curve_lty,
-    lwd = 2,
+    lwd = 1.35,
     xlab = "",
     ylab = "Event-free survival (inappropriate shock)",
     xlim = c(0, x_limit),
+    ylim = c(0.5, 1.0),
     xaxt = "n",
+    yaxt = "n",
     mark.time = TRUE,
+    mark = "|",
     conf.int = FALSE,
     cex.axis = main_axis_cex,
     cex.lab = main_label_cex
   )
+  axis(2, at = seq(0.5, 1.0, by = 0.05), las = 1, cex.axis = main_axis_cex)
   axis(1, at = x_breaks, labels = FALSE, tck = -0.015)
+  title(
+    main = "Figure 1. Kaplan-Meier Estimates of Time to First Inappropriate ICD Shock by Device Type",
+    line = 2.5,
+    cex.main = 1.05,
+    font.main = 2
+  )
+  mtext(
+    "Follow-up truncated at 3,000 days",
+    side = 3,
+    line = 1.0,
+    cex = 0.95,
+    font = 3,
+    col = "#1E3557"
+  )
   legend(
-    "bottomleft",
-    legend = labels,
-    col = curve_col,
-    lty = curve_lty,
+    x = 65,
+    y = 0.82,
+    legend = labels[legend_order],
+    col = curve_col[legend_order],
+    lty = curve_lty[legend_order],
     lwd = 2,
     bty = "n",
-    inset = 0.01,
     cex = legend_cex
+  )
+  text(
+    x = 60,
+    y = 0.555,
+    labels = paste(logrank_label, "(Descriptive comparison only)", sep = "\n"),
+    adj = c(0, 0),
+    cex = 0.83
+  )
+  text(
+    x = 2050,
+    y = 0.555,
+    labels = paste(
+      "Curves are truncated at 3,000 days.",
+      "Beyond this time, few patients remain at risk",
+      "and estimates are unstable.",
+      sep = "\n"
+    ),
+    adj = c(0, 0),
+    cex = 0.78,
+    font = 3,
+    col = "#1E3557"
   )
 
   par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
@@ -256,6 +307,11 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
 
 km_labels <- sub("^device_group=", "", names(km_fit$strata))
 if (!length(km_labels)) km_labels <- levels(factor(dt_final$device_group))
+km_logrank_p <- pchisq(
+  logrank_fit$chisq,
+  df = length(logrank_fit$n) - 1,
+  lower.tail = FALSE
+)
 
 study3_export_figure1_data(
   fit = km_fit,
@@ -268,23 +324,25 @@ study3_save_grid(
     study3_draw_km_with_risk_table(
       fit = km_fit,
       labels = km_labels,
-      x_limit = 3000
+      x_limit = 3000,
+      logrank_p = km_logrank_p
     )
   },
   png_file = study3_output_path("figure_1_km_inapp_shock_by_device_3000d_risk_table.png"),
   pdf_file = study3_output_path("figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf"),
-  png_width = 1800,
-  png_height = 1350,
+  png_width = 3000,
+  png_height = 2100,
   png_res = 300,
-  pdf_width = 6.0,
-  pdf_height = 4.5
+  pdf_width = 10.0,
+  pdf_height = 7.0
 )
 
 
 study3_draw_km_with_risk_table(
   fit = km_fit,
   labels = km_labels,
-  x_limit = 3000
+  x_limit = 3000,
+  logrank_p = km_logrank_p
 )
 
 
@@ -356,14 +414,127 @@ cif <- with(
 
 cif_inapp <- cif[grep(" 1$", names(cif))]
 
-plot(
-  cif_inapp,
-  lwd = 2,
-  lty = c(1, 2),
-  curvlab = c("Dual-chamber ICD", "Single-chamber ICD"),
-  xlab = "Days since ICD implantation",
-  ylab = "Cumulative incidence of inappropriate shock",
-  xlim = c(0, 5500),
-  ylim = c(0, 1)
+study3_cif_curve_data <- function(cif_object, x_limit = 3000) {
+  curve_names <- names(cif_object)
+  device_group <- sub(" 1$", "", curve_names)
+  keep <- device_group %in% c("Dual", "Single")
+
+  cif_object <- cif_object[keep]
+  device_group <- device_group[keep]
+
+  device_order <- c("Dual", "Single")
+  missing_devices <- setdiff(device_order, device_group)
+  if (length(missing_devices)) {
+    stop(
+      sprintf(
+        "Cannot draw Figure 2; missing CIF curve(s) for: %s",
+        paste(missing_devices, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  cif_object <- cif_object[match(device_order, device_group)]
+
+  rbindlist(
+    lapply(seq_along(cif_object), function(i) {
+      curve <- cif_object[[i]]
+      time_days <- c(0, curve$time)
+      estimate <- c(0, curve$est)
+      keep_time <- time_days <= x_limit
+
+      time_days <- time_days[keep_time]
+      estimate <- estimate[keep_time]
+
+      if (!length(time_days) || tail(time_days, 1) < x_limit) {
+        time_days <- c(time_days, x_limit)
+        estimate <- c(estimate, tail(estimate, 1))
+      }
+
+      data.table(
+        device_group = device_order[[i]],
+        time_days = time_days,
+        estimate = estimate
+      )
+    }),
+    use.names = TRUE
+  )
+}
+
+study3_draw_cif_figure2 <- function(cif_object, x_limit = 3000) {
+  cif_dt <- study3_cif_curve_data(cif_object, x_limit = x_limit)
+  device_labels <- c(
+    Dual = "Dual-chamber ICD",
+    Single = "Single-chamber ICD"
+  )
+  curve_col <- c(
+    Dual = "#003F9E",
+    Single = "#C00000"
+  )
+  curve_lty <- c(
+    Dual = 1,
+    Single = 2
+  )
+  x_breaks <- seq(0, x_limit, by = 500)
+  y_breaks <- seq(0, 1, by = 0.1)
+
+  old_par <- par(no.readonly = TRUE)
+  on.exit(par(old_par), add = TRUE)
+
+  par(mar = c(5.0, 6.2, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
+  plot(
+    NA,
+    xlim = c(0, x_limit),
+    ylim = c(0, 1),
+    axes = FALSE,
+    xlab = "Days since ICD implantation",
+    ylab = "Cumulative incidence of\ninappropriate ICD shock",
+    cex.lab = 1.18
+  )
+  axis(1, at = x_breaks, cex.axis = 1.05)
+  axis(2, at = y_breaks, labels = sprintf("%.1f", y_breaks), cex.axis = 1.05)
+
+  for (device in c("Dual", "Single")) {
+    d <- cif_dt[device_group == device]
+    lines(
+      d$time_days,
+      d$estimate,
+      type = "s",
+      col = curve_col[[device]],
+      lty = curve_lty[[device]],
+      lwd = 2
+    )
+  }
+
+  legend(
+    "topleft",
+    legend = unname(device_labels[c("Dual", "Single")]),
+    col = curve_col[c("Dual", "Single")],
+    lty = curve_lty[c("Dual", "Single")],
+    lwd = 2,
+    bty = "n",
+    cex = 1.12,
+    inset = c(0.03, 0.04)
+  )
+}
+
+study3_save_grid(
+  draw = function() {
+    study3_draw_cif_figure2(
+      cif_object = cif_inapp,
+      x_limit = 3000
+    )
+  },
+  png_file = study3_output_path("figure_cif_inapp_shock_by_device.png"),
+  pdf_file = study3_output_path("figure_cif_inapp_shock_by_device.pdf"),
+  png_width = 3000,
+  png_height = 1500,
+  png_res = 300,
+  pdf_width = 10.0,
+  pdf_height = 5.0
 )
 
+study3_draw_cif_figure2(
+  cif_object = cif_inapp,
+  x_limit = 3000
+)
