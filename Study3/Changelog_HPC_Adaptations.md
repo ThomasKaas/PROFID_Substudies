@@ -156,7 +156,7 @@ No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gr
 `Study3/09_Kaplan Maier and Fine Gray.R` now saves an updated Figure 1 Kaplan-Meier plot for inappropriate shock by device group:
 
 - x-axis display is limited to 3,000 days
-- a number-at-risk table is drawn below the Kaplan-Meier curves
+- a number-at-risk table is drawn below the Kaplan-Meier curves, styled as a separate lower panel in line with the Study 1 Kaplan-Meier figure
 - PNG and PDF copies are written to `Study3/outputs`
 - the original visual design is kept: red and blue solid Kaplan-Meier curves, line width 2, same y-axis label, and bottom-left legend placement
 

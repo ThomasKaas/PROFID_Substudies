@@ -87,13 +87,15 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
   n_groups <- length(labels)
   curve_col <- rep(c("red", "blue"), length.out = n_groups)
   curve_lty <- rep(1, n_groups)
+  left_margin <- 13.5
+  risk_label_x <- -0.06 * x_limit
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par), add = TRUE)
 
-  layout(matrix(c(1, 2), nrow = 2), heights = c(3.4, 1.25))
+  layout(matrix(c(1, 2), nrow = 2), heights = c(3.3, 1.5))
 
-  par(mar = c(0.3, 5.4, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
+  par(mar = c(0.3, left_margin, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
   plot(
     fit,
     col = curve_col,
@@ -117,25 +119,40 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 3000) {
     inset = 0.01
   )
 
-  par(mar = c(3.2, 5.4, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
+  par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
   plot(
     NA,
     xlim = c(0, x_limit),
-    ylim = c(0.5, n_groups + 1.0),
+    ylim = c(0, n_groups + 1.6),
     axes = FALSE,
     xlab = "",
     ylab = ""
   )
-  axis(1, at = x_breaks, labels = x_breaks, tick = FALSE, line = 0.2, cex.axis = 0.9)
+  axis(1, at = x_breaks, labels = x_breaks, tck = -0.06, line = 0, cex.axis = 0.9)
   mtext("Days since ICD implantation", side = 1, line = 2.0, cex = 0.95)
 
   row_y <- rev(seq_len(n_groups))
   par(xpd = NA)
-  text(-0.09 * x_limit, n_groups + 0.65, "Number at risk", adj = 1, font = 2, cex = 0.9)
-  text(-0.09 * x_limit, row_y, labels, adj = 1, cex = 0.85)
+  text(
+    risk_label_x,
+    n_groups + 0.95,
+    "Number\nat risk",
+    adj = 1,
+    font = 1,
+    cex = 0.85,
+    col = "grey30"
+  )
+  text(
+    risk_label_x,
+    row_y,
+    labels,
+    adj = 1,
+    cex = 0.78,
+    col = curve_col
+  )
 
   for (j in seq_along(x_breaks)) {
-    text(x_breaks[[j]], row_y, risk_table[, j], cex = 0.85)
+    text(x_breaks[[j]], row_y, risk_table[, j], cex = 0.9)
   }
   par(xpd = FALSE)
 }
