@@ -15,26 +15,27 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 cd "${repo_root}"
 
-if [ -z "${SLURM_JOB_ID:-}" ]; then
-  mkdir -p Study1/outputs
-  job_id="$(
-    sbatch \
-      --parsable \
-      --output="Study1/outputs/profid_inventory_%j.log" \
-      --error="Study1/outputs/profid_inventory_%j.log" \
-      "$0" "$@"
-  )"
-  echo "Submitted PROFID inventory job ${job_id}"
-  echo "Log file: Study1/outputs/profid_inventory_${job_id}.log"
-  exit 0
-fi
-
 PROFID_DATA_ROOT="${PROFID_DATA_ROOT:-/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data}"
 OUT_DIR="${PROFID_INVENTORY_OUT_DIR:-${PROFID_DATA_ROOT}/derived/data_structure}"
+LOG_DIR="${PROFID_INVENTORY_LOG_DIR:-${OUT_DIR}/logs}"
 MAX_FULL_READ_MB="${PROFID_INVENTORY_MAX_FULL_READ_MB:-4096}"
 CHUNK_ROWS="${PROFID_INVENTORY_CHUNK_ROWS:-100000}"
 
-mkdir -p "${OUT_DIR}" Study1/outputs
+if [ -z "${SLURM_JOB_ID:-}" ]; then
+  mkdir -p "${LOG_DIR}"
+  job_id="$(
+    sbatch \
+      --parsable \
+      --output="${LOG_DIR}/profid_inventory_%j.log" \
+      --error="${LOG_DIR}/profid_inventory_%j.log" \
+      "$0" "$@"
+  )"
+  echo "Submitted PROFID inventory job ${job_id}"
+  echo "Log file: ${LOG_DIR}/profid_inventory_${job_id}.log"
+  exit 0
+fi
+
+mkdir -p "${OUT_DIR}" "${LOG_DIR}"
 
 if [ -d "/global/work/${USER}" ]; then
   export TMPDIR="/global/work/${USER}/profid_inventory/${SLURM_JOB_ID:-manual}"
