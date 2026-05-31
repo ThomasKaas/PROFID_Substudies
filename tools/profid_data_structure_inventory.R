@@ -33,7 +33,10 @@ print_usage <- function() {
     "    --out-dir /sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data/derived/data_structure \\\n",
     "    --scope source_plus_cdm \\\n",
     "    --include-archives yes \\\n",
-    "    --include-availability yes\n",
+    "    --include-availability yes \\\n",
+    "    --max-full-read-mb 1024 \\\n",
+    "    --chunk-rows 100000 \\\n",
+    "    --resume yes\n",
     sep = ""
   )
 }
@@ -52,6 +55,9 @@ out_dir <- get_arg(
 scope <- get_arg("scope", "source_plus_cdm")
 include_archives <- yes_arg("include-archives", TRUE)
 include_availability <- yes_arg("include-availability", TRUE)
+resume <- yes_arg("resume", FALSE)
+max_full_read_mb <- as.numeric(get_arg("max-full-read-mb", "1024"))
+chunk_rows <- as.integer(get_arg("chunk-rows", "100000"))
 substudy_config <- get_arg(
   "substudy-config",
   file.path(repo_root, "config", "profid_substudy_sources.csv")
@@ -74,6 +80,9 @@ message("Output directory: ", normalizePath(out_dir, winslash = "/", mustWork = 
 message("Scope: ", scope)
 message("Include availability counts: ", include_availability)
 message("Include ZIP/RAR archives: ", include_archives)
+message("Resume existing structure inventory: ", resume)
+message("Maximum full-read size: ", max_full_read_mb, " MB")
+message("Delimited chunk rows: ", chunk_rows)
 
 supported_table_ext <- c(
   "csv", "tsv", "txt", "xlsx", "xls", "ods",
@@ -82,6 +91,17 @@ supported_table_ext <- c(
 supported_archive_ext <- c("zip", "rar")
 
 pkg_available <- function(pkg) requireNamespace(pkg, quietly = TRUE)
+
+file_size_mb <- function(file) {
+  info <- file.info(file)
+  if (!nrow(info) || is.na(info$size)) return(NA_real_)
+  as.numeric(info$size) / 1024^2
+}
+
+over_full_read_limit <- function(file) {
+  size <- file_size_mb(file)
+  is.finite(size) && !is.na(size) && size > max_full_read_mb
+}
 
 reader_package_status <- data.frame(
   package = c("data.table", "readxl", "openxlsx", "readODS", "haven", "arrow"),
@@ -382,6 +402,71 @@ table_counts <- function(dat) {
   list(n_rows = n_rows, nonmissing = nonmissing, missing = missing)
 }
 
+table_counts_from_delimited_chunks <- function(file, sep) {
+  if (!pkg_available("data.table")) {
+    return(NULL)
+  }
+
+  first <- data.table::fread(
+    file,
+    sep = sep,
+    na.strings = c("", "NA", "N/A", "NULL", "."),
+    data.table = FALSE,
+    showProgress = FALSE,
+    nrows = chunk_rows,
+    check.names = FALSE
+  )
+
+  col_names <- names(first)
+  n_rows <- nrow(first)
+  nonmissing <- vapply(first, nonmissing_count, integer(1))
+
+  if (nrow(first) < chunk_rows) {
+    return(list(
+      col_names = col_names,
+      n_rows = n_rows,
+      nonmissing = nonmissing,
+      missing = n_rows - nonmissing
+    ))
+  }
+
+  rows_read <- nrow(first)
+  rm(first)
+  gc(verbose = FALSE)
+
+  repeat {
+    chunk <- data.table::fread(
+      file,
+      sep = sep,
+      skip = rows_read + 1L,
+      header = FALSE,
+      col.names = col_names,
+      na.strings = c("", "NA", "N/A", "NULL", "."),
+      data.table = FALSE,
+      showProgress = FALSE,
+      nrows = chunk_rows,
+      check.names = FALSE
+    )
+
+    if (!nrow(chunk)) break
+
+    n_rows <- n_rows + nrow(chunk)
+    nonmissing <- nonmissing + vapply(chunk, nonmissing_count, integer(1))
+    rows_read <- rows_read + nrow(chunk)
+
+    if (nrow(chunk) < chunk_rows) break
+    rm(chunk)
+    gc(verbose = FALSE)
+  }
+
+  list(
+    col_names = col_names,
+    n_rows = n_rows,
+    nonmissing = nonmissing,
+    missing = n_rows - nonmissing
+  )
+}
+
 detect_delimiter <- function(file) {
   ext <- path_ext(file)
   if (ext == "tsv") return(list(sep = "\t", count = NA_integer_))
@@ -425,6 +510,33 @@ read_delimited_file <- function(file, source_info, include_availability) {
 
   dat <- NULL
   err <- NULL
+
+  if (include_availability && pkg_available("data.table")) {
+    chunked <- tryCatch(
+      table_counts_from_delimited_chunks(file, sep),
+      error = function(e) {
+        err <<- conditionMessage(e)
+        NULL
+      }
+    )
+    if (!is.null(chunked)) {
+      return(make_inventory_rows(
+        source_info,
+        NA_character_,
+        chunked$col_names,
+        chunked$n_rows,
+        chunked$nonmissing,
+        chunked$missing
+      ))
+    }
+  }
+
+  if (include_availability && over_full_read_limit(file)) {
+    include_availability <- FALSE
+    structure_limited <- TRUE
+  } else {
+    structure_limited <- FALSE
+  }
 
   if (pkg_available("data.table")) {
     dat <- tryCatch(
@@ -473,8 +585,21 @@ read_delimited_file <- function(file, source_info, include_availability) {
     nonmissing = NULL,
     missing = NULL
   )
-  make_inventory_rows(source_info, NA_character_, names(dat), counts$n_rows,
-                      counts$nonmissing, counts$missing)
+  make_inventory_rows(
+    source_info,
+    NA_character_,
+    names(dat),
+    counts$n_rows,
+    counts$nonmissing,
+    counts$missing,
+    read_status = if (structure_limited) "ok_structure_only_size_limit" else "ok",
+    read_error = if (structure_limited) {
+      sprintf("File exceeds --max-full-read-mb (%s MB); column names were read without availability counts.",
+              max_full_read_mb)
+    } else {
+      NA_character_
+    }
+  )
 }
 
 excel_sheets <- function(file) {
@@ -505,6 +630,12 @@ read_excel_sheet <- function(file, sheet, include_availability) {
 }
 
 read_excel_file <- function(file, source_info, include_availability) {
+  structure_limited <- FALSE
+  if (include_availability && over_full_read_limit(file)) {
+    include_availability <- FALSE
+    structure_limited <- TRUE
+  }
+
   sheets <- tryCatch(excel_sheets(file), error = function(e) {
     return(structure(character(0), error = conditionMessage(e)))
   })
@@ -526,13 +657,32 @@ read_excel_file <- function(file, source_info, include_availability) {
       nonmissing = NULL,
       missing = NULL
     )
-    rows[[i]] <- make_inventory_rows(source_info, sheet, names(dat), counts$n_rows,
-                                     counts$nonmissing, counts$missing)
+    rows[[i]] <- make_inventory_rows(
+      source_info,
+      sheet,
+      names(dat),
+      counts$n_rows,
+      counts$nonmissing,
+      counts$missing,
+      read_status = if (structure_limited) "ok_structure_only_size_limit" else "ok",
+      read_error = if (structure_limited) {
+        sprintf("File exceeds --max-full-read-mb (%s MB); sheet names and column names were read without availability counts.",
+                max_full_read_mb)
+      } else {
+        NA_character_
+      }
+    )
   }
   do.call(rbind, rows)
 }
 
 read_ods_file <- function(file, source_info, include_availability) {
+  structure_limited <- FALSE
+  if (include_availability && over_full_read_limit(file)) {
+    include_availability <- FALSE
+    structure_limited <- TRUE
+  }
+
   if (!pkg_available("readODS")) {
     return(empty_inventory_row(
       source_info,
@@ -567,13 +717,32 @@ read_ods_file <- function(file, source_info, include_availability) {
       nonmissing = NULL,
       missing = NULL
     )
-    rows[[i]] <- make_inventory_rows(source_info, sheet, names(dat), counts$n_rows,
-                                     counts$nonmissing, counts$missing)
+    rows[[i]] <- make_inventory_rows(
+      source_info,
+      sheet,
+      names(dat),
+      counts$n_rows,
+      counts$nonmissing,
+      counts$missing,
+      read_status = if (structure_limited) "ok_structure_only_size_limit" else "ok",
+      read_error = if (structure_limited) {
+        sprintf("File exceeds --max-full-read-mb (%s MB); sheet names and column names were read without availability counts.",
+                max_full_read_mb)
+      } else {
+        NA_character_
+      }
+    )
   }
   do.call(rbind, rows)
 }
 
 read_haven_file <- function(file, source_info, include_availability) {
+  structure_limited <- FALSE
+  if (include_availability && over_full_read_limit(file)) {
+    include_availability <- FALSE
+    structure_limited <- TRUE
+  }
+
   if (!pkg_available("haven")) {
     return(empty_inventory_row(
       source_info,
@@ -609,11 +778,31 @@ read_haven_file <- function(file, source_info, include_availability) {
     nonmissing = NULL,
     missing = NULL
   )
-  make_inventory_rows(source_info, NA_character_, names(dat), counts$n_rows,
-                      counts$nonmissing, counts$missing)
+  make_inventory_rows(
+    source_info,
+    NA_character_,
+    names(dat),
+    counts$n_rows,
+    counts$nonmissing,
+    counts$missing,
+    read_status = if (structure_limited) "ok_structure_only_size_limit" else "ok",
+    read_error = if (structure_limited) {
+      sprintf("File exceeds --max-full-read-mb (%s MB); column names were read without availability counts.",
+              max_full_read_mb)
+    } else {
+      NA_character_
+    }
+  )
 }
 
 read_parquet_file <- function(file, source_info, include_availability) {
+  if (include_availability && over_full_read_limit(file)) {
+    include_availability <- FALSE
+    structure_limited <- TRUE
+  } else {
+    structure_limited <- FALSE
+  }
+
   if (!pkg_available("arrow")) {
     return(empty_inventory_row(
       source_info,
@@ -636,8 +825,21 @@ read_parquet_file <- function(file, source_info, include_availability) {
     nonmissing = NULL,
     missing = NULL
   )
-  make_inventory_rows(source_info, NA_character_, names(dat), counts$n_rows,
-                      counts$nonmissing, counts$missing)
+  make_inventory_rows(
+    source_info,
+    NA_character_,
+    names(dat),
+    counts$n_rows,
+    counts$nonmissing,
+    counts$missing,
+    read_status = if (structure_limited) "ok_structure_only_size_limit" else "ok",
+    read_error = if (structure_limited) {
+      sprintf("File exceeds --max-full-read-mb (%s MB); column names were read without availability counts.",
+              max_full_read_mb)
+    } else {
+      NA_character_
+    }
+  )
 }
 
 rectangular_tables_from_rds <- function(obj) {
@@ -667,6 +869,16 @@ rectangular_tables_from_rds <- function(obj) {
 }
 
 read_rds_file <- function(file, source_info, include_availability) {
+  if (include_availability && over_full_read_limit(file)) {
+    return(empty_inventory_row(
+      source_info,
+      "rds_object",
+      "skipped_large_rds",
+      sprintf("RDS file exceeds --max-full-read-mb (%s MB); skipped to avoid loading a large object into memory.",
+              max_full_read_mb)
+    ))
+  }
+
   obj <- tryCatch(readRDS(file), error = function(e) e)
   if (inherits(obj, "error")) {
     return(empty_inventory_row(source_info, "rds_object", "read_error", conditionMessage(obj)))
@@ -931,6 +1143,36 @@ write_csv <- function(df, path) {
   message("Wrote: ", normalizePath(path, winslash = "/", mustWork = FALSE), " [", nrow(df), " rows]")
 }
 
+append_csv <- function(df, path) {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  write_header <- !file.exists(path) || file.info(path)$size == 0
+  utils::write.table(
+    df,
+    path,
+    sep = ",",
+    row.names = FALSE,
+    col.names = write_header,
+    append = !write_header,
+    na = "",
+    qmethod = "double"
+  )
+}
+
+read_existing_completed_sources <- function(path) {
+  if (!file.exists(path) || !resume) return(character(0))
+  existing <- tryCatch(
+    utils::read.csv(
+      path,
+      stringsAsFactors = FALSE,
+      check.names = FALSE,
+      colClasses = "character"
+    ),
+    error = function(e) data.frame()
+  )
+  if (!nrow(existing) || !"relative_path" %in% names(existing)) return(character(0))
+  unique(existing$relative_path[!is.na(existing$relative_path) & nzchar(existing$relative_path)])
+}
+
 files <- discover_files(data_root, scope, include_archives)
 if (!length(files)) {
   stop("No supported source files found under the requested data root and scope.", call. = FALSE)
@@ -938,13 +1180,55 @@ if (!length(files)) {
 
 message("Discovered supported files: ", length(files))
 
-inventory_parts <- vector("list", length(files))
+structure_path <- file.path(out_dir, "profid_data_structure_master.csv")
+if (resume && file.exists(structure_path)) {
+  existing_header <- tryCatch(
+    names(utils::read.csv(structure_path, nrows = 0, check.names = FALSE)),
+    error = function(e) character(0)
+  )
+  required_header <- c(
+    "source_dataset", "source_stage", "source_kind", "is_observation_source",
+    "relative_path", "read_status"
+  )
+  if (!all(required_header %in% existing_header)) {
+    backup_path <- paste0(
+      structure_path,
+      ".backup_",
+      format(Sys.time(), "%Y%m%d_%H%M%S")
+    )
+    warning(
+      "Existing structure inventory has an older or incompatible schema; moving it to ",
+      backup_path,
+      call. = FALSE
+    )
+    file.rename(structure_path, backup_path)
+  }
+}
+
+if (!resume && file.exists(structure_path)) {
+  unlink(structure_path)
+}
+
+completed_sources <- read_existing_completed_sources(structure_path)
+if (length(completed_sources)) {
+  message("Resume mode: skipping already inventoried top-level files: ", length(completed_sources))
+}
+
+processed_n <- 0L
+skipped_n <- 0L
+
 for (i in seq_along(files)) {
   file <- files[[i]]
   info <- source_info_for_path(file, data_root)
+
+  if (info$relative_path %in% completed_sources) {
+    skipped_n <- skipped_n + 1L
+    next
+  }
+
   message(sprintf("[%d/%d] %s", i, length(files), info$relative_path))
   ext <- path_ext(file)
-  inventory_parts[[i]] <- tryCatch(
+  rows <- tryCatch(
     {
       if (ext %in% supported_archive_ext) {
         read_archive_file(file, info, data_root, include_availability)
@@ -954,13 +1238,21 @@ for (i in seq_along(files)) {
     },
     error = function(e) empty_inventory_row(info, NA_character_, "read_error", conditionMessage(e))
   )
+
+  append_csv(rows, structure_path)
+  processed_n <- processed_n + 1L
+  rm(rows)
+  gc(verbose = FALSE)
 }
 
-inventory <- do.call(rbind, inventory_parts)
-rownames(inventory) <- NULL
+message("Processed files in this run: ", processed_n)
+message("Skipped files from previous inventory: ", skipped_n)
 
-structure_path <- file.path(out_dir, "profid_data_structure_master.csv")
-write_csv(inventory, structure_path)
+inventory <- utils::read.csv(
+  structure_path,
+  stringsAsFactors = FALSE,
+  check.names = FALSE
+)
 
 availability <- inventory[
   inventory$read_status == "ok" &
