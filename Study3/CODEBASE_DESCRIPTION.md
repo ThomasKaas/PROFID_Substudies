@@ -492,25 +492,28 @@ survfit(
 ```
 
 2. Runs a log-rank test with `survdiff()`.
-3. Saves Figure 1 as a Kaplan-Meier plot of inappropriate shock event-free survival by device group with the x-axis display limited to 3,000 days and a Study 1-style number-at-risk table below the curves.
-4. Uses a presentation-specific Figure 1 design: y-axis display truncated to 0.50-1.00, single-chamber ICD shown as a blue solid curve, dual-chamber ICD shown as a red dashed curve, thinner curve lines, and short thin censoring tick marks.
+3. Saves Figure 1 as a Kaplan-Meier plot of inappropriate shock event-free survival by device group with the x-axis display limited to 2,200 days, the x-axis labelled in years, and a Study 1-style number-at-risk table below the curves.
+4. Uses a presentation-specific Figure 1 design: main y-axis scaled from 0.00 to 1.00, zoom inset showing 0.80-1.00 event-free survival, Single Lead Device shown as a blue solid curve, Double Lead Device shown as a red dashed curve, thinner curve lines, and short thin censoring tick marks.
 5. Builds a Fine-Gray event indicator:
    - `0` censored
    - `1` inappropriate shock
    - `2` death before inappropriate shock as competing event
-6. Uses `cmprsk::crr()` with `device_group` as covariate.
-7. Extracts subdistribution hazard ratio, 95 percent confidence interval, and p value.
-8. Builds cumulative incidence curves with `cuminc()`.
+6. Uses the original `cmprsk::crr()` model with `device_group` as the only covariate.
+7. Adds a dataset-adjusted `cmprsk::crr()` model with `device_group + dataset` as fixed covariates and dataset-specific censoring through `cengroup = dataset`.
+8. Extracts the `device_groupSingle` subdistribution hazard ratio, 95 percent confidence interval, and p value from both Fine-Gray models by coefficient name.
+9. Writes both Fine-Gray device-effect results to CSV.
+10. Builds cumulative incidence curves with `cuminc()`.
 
 Main outputs:
 
-- `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
-- `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
-- `figure_1_km_curve_data_3000d.csv`
-- `figure_1_km_number_at_risk_long_3000d.csv`
-- `figure_1_km_number_at_risk_wide_3000d.csv`
+- `figure_1_km_inapp_shock_by_device_2200d_risk_table.png`
+- `figure_1_km_inapp_shock_by_device_2200d_risk_table.pdf`
+- `figure_1_km_curve_data_2200d.csv`
+- `figure_1_km_number_at_risk_long_2200d.csv`
+- `figure_1_km_number_at_risk_wide_2200d.csv`
+- `finegray_primary_device_results.csv`
 
-The Figure 1 changes are output-only. The CSV exports contain the Kaplan-Meier curve/censor/event data and the number-at-risk table used for the plot, so the figure can be reloaded and replotted independently. They do not modify the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray model, or cumulative-incidence analysis.
+The Figure 1 changes are output-only. The KM CSV exports contain the Kaplan-Meier curve/censor/event data and the number-at-risk table used for the plot, so the figure can be reloaded and replotted independently. The Fine-Gray CSV export contains the original device-only `crr()` result and the additional dataset-adjusted `crr()` result. The original Fine-Gray model, endpoint definition, input cohort, filtering rule, and cumulative-incidence analysis are preserved.
 
 Important reproducibility issue:
 
@@ -607,9 +610,11 @@ Surv(t_followup_days_final, event_inapp_shock) ~
    - `0` censored
    - `1` inappropriate shock
    - `2` death before inappropriate shock
-10. Fits Fine-Gray model with `cmprsk::crr()`.
-11. Writes cumulative incidence plot PNG.
-12. Saves the sensitivity cohort.
+10. Fits the original Fine-Gray model with `cmprsk::crr()`.
+11. Adds a dataset-adjusted Fine-Gray model with `device_group + dataset` as fixed covariates and dataset-specific censoring through `cengroup = dataset`.
+12. Writes both Fine-Gray sensitivity device-effect results to CSV.
+13. Writes cumulative incidence plot PNG.
+14. Saves the sensitivity cohort.
 
 Important reproducibility issue:
 
@@ -766,17 +771,19 @@ Descriptive outputs:
 Sensitivity outputs:
 
 - `incidence_rates_per_100py_by_device_sens_min180d.csv`
+- `finegray_sens_min180d_device_results.csv`
 - `figure_km_inapp_shock_by_device_sens_min180d.png`
 - `figure_cif_inapp_shock_by_device_sens_min180d.png`
 - `study3_analysis_sensitivity_min180d.rds`
 
 Kaplan-Meier / Fine-Gray outputs:
 
-- `figure_1_km_inapp_shock_by_device_3000d_risk_table.png`
-- `figure_1_km_inapp_shock_by_device_3000d_risk_table.pdf`
-- `figure_1_km_curve_data_3000d.csv`
-- `figure_1_km_number_at_risk_long_3000d.csv`
-- `figure_1_km_number_at_risk_wide_3000d.csv`
+- `figure_1_km_inapp_shock_by_device_2200d_risk_table.png`
+- `figure_1_km_inapp_shock_by_device_2200d_risk_table.pdf`
+- `figure_1_km_curve_data_2200d.csv`
+- `figure_1_km_number_at_risk_long_2200d.csv`
+- `figure_1_km_number_at_risk_wide_2200d.csv`
+- `finegray_primary_device_results.csv`
 
 Intermediate or expected files not produced in this checkout:
 

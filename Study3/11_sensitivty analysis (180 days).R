@@ -195,7 +195,81 @@ cat(
   "\n", sep = ""
 )
 
-# CIF plot 
+study3_extract_crr_device_result <- function(fit, term, model, dataset_handling,
+                                             data, analysis) {
+  term_idx <- match(term, names(fit$coef))
+  if (is.na(term_idx)) {
+    stop(
+      sprintf(
+        "Term '%s' not found in Fine-Gray model coefficients: %s",
+        term,
+        paste(names(fit$coef), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  beta <- unname(fit$coef[term_idx])
+  se <- sqrt(fit$var[term_idx, term_idx])
+
+  data.table(
+    analysis = analysis,
+    model = model,
+    term = term,
+    dataset_handling = dataset_handling,
+    n = nrow(data),
+    inappropriate_shocks = sum(data$fg_event == 1L, na.rm = TRUE),
+    competing_deaths = sum(data$fg_event == 2L, na.rm = TRUE),
+    censored = sum(data$fg_event == 0L, na.rm = TRUE),
+    log_sHR = beta,
+    se = se,
+    sHR = exp(beta),
+    lci_95 = exp(beta - 1.96 * se),
+    uci_95 = exp(beta + 1.96 * se),
+    p_value = 2 * pnorm(-abs(beta / se)),
+    datasets_included = paste(sort(unique(as.character(data$dataset))), collapse = ";")
+  )
+}
+
+X_dataset <- model.matrix(~ device_group + dataset, data = dt_sens_6mo)[, -1, drop = FALSE]
+
+fg_sens_6mo_dataset <- crr(
+  ftime    = dt_sens_6mo$t_followup_days_final,
+  fstatus  = dt_sens_6mo$fg_event,
+  cov1     = X_dataset,
+  cengroup = dt_sens_6mo$dataset
+)
+
+cat("\n--- Fine–Gray sensitivity dataset-adjusted (>=180d; dataset fixed covariates + cengroup) ---\n")
+print(summary(fg_sens_6mo_dataset))
+
+fg_sens_6mo_results <- rbindlist(
+  list(
+    study3_extract_crr_device_result(
+      fit = fg_sens_6mo,
+      term = "device_groupSingle",
+      model = "original_crr_device_only",
+      dataset_handling = "none",
+      data = dt_sens_6mo,
+      analysis = "sensitivity_min180d"
+    ),
+    study3_extract_crr_device_result(
+      fit = fg_sens_6mo_dataset,
+      term = "device_groupSingle",
+      model = "dataset_adjusted_crr",
+      dataset_handling = "dataset fixed covariates + dataset-specific censoring via cengroup",
+      data = dt_sens_6mo,
+      analysis = "sensitivity_min180d"
+    )
+  )
+)
+
+fwrite(
+  fg_sens_6mo_results,
+  study3_output_path("finegray_sens_min180d_device_results.csv")
+)
+
+# CIF plot
 cif_sens_6mo <- with(
   dt_sens_6mo,
   cuminc(t_followup_days_final, fg_event, group = device_group)

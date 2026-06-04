@@ -155,15 +155,34 @@ No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gr
 
 `Study3/09_Kaplan Maier and Fine Gray.R` now saves an updated Figure 1 Kaplan-Meier plot for inappropriate shock by device group:
 
-- x-axis display is limited to 3,000 days
-- y-axis display is truncated to 0.50-1.00 event-free survival for Figure 1 presentation
-- single-chamber ICD is drawn as a blue solid curve and dual-chamber ICD as a red dashed curve
+- x-axis display is limited to 2,200 days and labelled in years
+- the main y-axis uses absolute scaling from 0.00 to 1.00
+- a zoom inset shows the 0.80-1.00 event-free survival range
+- Single Lead Device is drawn as a blue solid curve and Double Lead Device as a red dashed curve
 - curve line widths are reduced and censoring tick marks are drawn manually as short, thin vertical marks so the KM trend lines remain clearly visible
 - a number-at-risk table is drawn below the Kaplan-Meier curves, styled as a separate lower panel in line with the Study 1 Kaplan-Meier figure
 - PNG and PDF copies are written to `Study3/outputs`
 - the quantitative data behind the plot are also exported to CSV files in `Study3/outputs`, so the figure can be reloaded and replotted independently
 
 This is an output-only plotting adaptation. It does not change the Kaplan-Meier fit, log-rank test, endpoint definition, input cohort, filtering rule, Fine-Gray event coding, Fine-Gray model, cumulative-incidence analysis, or any statistical result.
+
+## Dataset-Adjusted Fine-Gray Result Exports
+
+In response to reviewer feedback about dataset handling in the competing-risk analysis, the Fine-Gray sections in `Study3/09_Kaplan Maier and Fine Gray.R` and `Study3/11_sensitivty analysis (180 days).R` now keep the original `cmprsk::crr()` device-only model and add a second dataset-adjusted `crr()` model:
+
+```r
+model.matrix(~ device_group + dataset, data = ...)
+crr(..., cov1 = X_dataset, cengroup = dataset)
+```
+
+The added model treats dataset as fixed covariates and uses dataset-specific censoring through `cengroup`. This is documented as dataset-adjusted Fine-Gray analysis, not as a literal `strata(dataset)` Cox model.
+
+Two CSV files are now written to `Study3/outputs`:
+
+- `finegray_primary_device_results.csv`
+- `finegray_sens_min180d_device_results.csv`
+
+Each CSV contains the original device-only Fine-Gray result and the dataset-adjusted Fine-Gray result for `device_groupSingle`, including event counts, log-sHR, sHR, 95% confidence interval, p value, and datasets included. The original Fine-Gray model, event coding, KM/CIF plots, Cox models, cohort filters, and endpoint definitions remain unchanged.
 
 ## How To Check Paths On HPC
 
