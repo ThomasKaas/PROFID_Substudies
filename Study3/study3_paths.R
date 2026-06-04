@@ -71,7 +71,7 @@ study3_derived_root <- function() {
 study3_output_root <- function() {
   Sys.getenv(
     "PROFID_STUDY3_OUTPUT_ROOT",
-    unset = file.path(study3_repo_root(), "Study3", "Outputs")
+    unset = file.path(study3_repo_root(), "Study3", "outputs")
   )
 }
 

@@ -205,7 +205,7 @@ if (!nzchar(run_timestamp)) {
 
 output_dir <- Sys.getenv(
   "PROFID_STUDY3_OUTPUT_ROOT",
-  unset = file.path(repo_root, "Study3", "Outputs")
+  unset = file.path(repo_root, "Study3", "outputs")
 )
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 log_file <- file.path(output_dir, sprintf("master_run_%s.txt", run_timestamp))
