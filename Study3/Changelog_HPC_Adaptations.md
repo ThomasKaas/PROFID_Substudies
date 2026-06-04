@@ -157,8 +157,10 @@ No statistical analysis logic was changed. The Cox model, log-rank test, Fine-Gr
 
 - x-axis display is limited to 2,200 days and labelled in years
 - the main y-axis uses absolute scaling from 0.00 to 1.00
-- a zoom inset shows the 0.80-1.00 event-free survival range
+- an untitled enlarged zoom inset shows the 0.90-1.00 event-free survival range
 - Single Lead Device is drawn as a blue solid curve and Double Lead Device as a red dashed curve
+- the log-rank annotation is placed below the legend on the left side of the main panel
+- the x-axis title is spaced slightly farther below the year tick labels
 - curve line widths are reduced and censoring tick marks are drawn manually as short, thin vertical marks so the KM trend lines remain clearly visible
 - a number-at-risk table is drawn below the Kaplan-Meier curves, styled as a separate lower panel in line with the Study 1 Kaplan-Meier figure
 - PNG and PDF copies are written to `Study3/outputs`

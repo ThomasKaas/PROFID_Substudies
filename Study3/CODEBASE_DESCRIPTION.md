@@ -493,7 +493,7 @@ survfit(
 
 2. Runs a log-rank test with `survdiff()`.
 3. Saves Figure 1 as a Kaplan-Meier plot of inappropriate shock event-free survival by device group with the x-axis display limited to 2,200 days, the x-axis labelled in years, and a Study 1-style number-at-risk table below the curves.
-4. Uses a presentation-specific Figure 1 design: main y-axis scaled from 0.00 to 1.00, zoom inset showing 0.80-1.00 event-free survival, Single Lead Device shown as a blue solid curve, Double Lead Device shown as a red dashed curve, thinner curve lines, and short thin censoring tick marks.
+4. Uses a presentation-specific Figure 1 design: main y-axis scaled from 0.00 to 1.00, enlarged untitled zoom inset showing 0.90-1.00 event-free survival, Single Lead Device shown as a blue solid curve, Double Lead Device shown as a red dashed curve, thinner curve lines, short thin censoring tick marks, left-side log-rank annotation below the legend, and slightly increased spacing below the year tick labels.
 5. Builds a Fine-Gray event indicator:
    - `0` censored
    - `1` inappropriate shock

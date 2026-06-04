@@ -215,9 +215,9 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   risk_number_cex <- 1.03
   censor_tick_half_height <- 0.004
   censor_tick_lwd <- 0.45
-  inset_x <- c(0.47, 0.97) * x_limit
-  inset_y <- c(0.33, 0.76)
-  inset_ylim <- c(0.8, 1.0)
+  inset_x <- c(0.45, 0.97) * x_limit
+  inset_y <- c(0.27, 0.78)
+  inset_ylim <- c(0.9, 1.0)
   logrank_label <- paste0("Log-rank p = ", study3_format_p(logrank_p))
 
   old_par <- par(no.readonly = TRUE)
@@ -298,8 +298,8 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
     cex = legend_cex
   )
 	  text(
-	    x = 0.53 * x_limit,
-	    y = 0.08,
+	    x = 70,
+	    y = 0.035,
 	    labels = paste(logrank_label, "(Descriptive comparison only)", sep = "\n"),
 	    adj = c(0, 0),
 	    cex = 0.83
@@ -352,12 +352,11 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], border = "grey25", lwd = 0.8)
   axis_x_ticks <- round(seq(0, floor(x_limit / 365.25), by = 2) * 365.25)
   axis_x_labels <- as.character(seq(0, floor(x_limit / 365.25), by = 2))
-  axis_y_ticks <- seq(0.8, 1.0, by = 0.1)
+  axis_y_ticks <- seq(0.9, 1.0, by = 0.05)
   segments(to_inset_x(axis_x_ticks), inset_y[[1]], to_inset_x(axis_x_ticks), inset_y[[1]] - 0.015)
   text(to_inset_x(axis_x_ticks), inset_y[[1]] - 0.045, axis_x_labels, cex = 0.67, xpd = NA)
   segments(inset_x[[1]], to_inset_y(axis_y_ticks), inset_x[[1]] - 0.018 * x_limit, to_inset_y(axis_y_ticks))
-  text(inset_x[[1]] - 0.028 * x_limit, to_inset_y(axis_y_ticks), sprintf("%.1f", axis_y_ticks), cex = 0.67, adj = 1, xpd = NA)
-  text(inset_x[[1]], inset_y[[2]] + 0.035, "Zoom: 0.8-1.0", adj = c(0, 0), cex = 0.72, font = 2, xpd = NA)
+  text(inset_x[[1]] - 0.028 * x_limit, to_inset_y(axis_y_ticks), sprintf("%.2f", axis_y_ticks), cex = 0.67, adj = 1, xpd = NA)
 
 	  par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
 	  plot(
@@ -369,7 +368,7 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
 	    ylab = ""
 	  )
 	  axis(1, at = x_breaks, labels = x_axis$labels, tck = -0.06, line = 0, cex.axis = risk_axis_cex)
-	  mtext("Years since ICD implantation", side = 1, line = 2.0, cex = 1.05)
+	  mtext("Years since ICD implantation", side = 1, line = 2.35, cex = 1.05)
 
   row_y <- rev(seq_len(n_groups)) * 0.78 + 0.35
   par(xpd = NA)
