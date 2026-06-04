@@ -9,7 +9,7 @@ email="thomas.kaas@charite.de"
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "${script_dir}/.." && pwd)"
 timestamp="${STUDY3_RUN_TIMESTAMP:-$(date '+%d-%m-%Y-%H-%M-%S')}"
-log_dir="${repo_root}/Study3/outputs"
+log_dir="${repo_root}/Study3/Outputs"
 log_file="${log_dir}/log_run_${timestamp}.log"
 
 send_mail() {

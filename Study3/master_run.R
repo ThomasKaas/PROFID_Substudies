@@ -197,6 +197,26 @@ old_wd <- getwd()
 setwd(repo_root)
 on.exit(setwd(old_wd), add = TRUE)
 
+run_timestamp <- Sys.getenv("STUDY3_RUN_TIMESTAMP", unset = "")
+if (!nzchar(run_timestamp)) {
+  run_timestamp <- format(Sys.time(), "%Y-%m-%d_%H-%M-%S")
+  Sys.setenv(STUDY3_RUN_TIMESTAMP = run_timestamp)
+}
+
+output_dir <- Sys.getenv(
+  "PROFID_STUDY3_OUTPUT_ROOT",
+  unset = file.path(repo_root, "Study3", "Outputs")
+)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+log_file <- file.path(output_dir, sprintf("master_run_%s.txt", run_timestamp))
+log_con <- file(log_file, open = "wt")
+sink(log_con, split = TRUE)
+on.exit({
+  sink()
+  close(log_con)
+}, add = TRUE)
+cat(sprintf("Master run log: %s\n\n", log_file))
+
 repos <- getOption("repos")
 if (is.null(repos) || is.na(repos[["CRAN"]]) || identical(unname(repos[["CRAN"]]), "@CRAN@")) {
   options(repos = c(CRAN = "https://cloud.r-project.org"))
