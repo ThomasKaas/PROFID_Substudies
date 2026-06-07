@@ -11,10 +11,27 @@ library(readxl)
 library(stringr)
 library(lubridate)
 
+parse_israel_date <- function(x) {
+  raw <- trimws(as.character(x))
+  raw[raw == ""] <- NA_character_
+  parsed <- as.IDate(rep(NA_character_, length(raw)))
+
+  for (date_format in c("%b %d, %Y", "%d-%b-%y", "%d%b%Y", "%Y-%m-%d")) {
+    missing <- is.na(parsed) & !is.na(raw)
+    parsed[missing] <- suppressWarnings(as.IDate(raw[missing], format = date_format))
+  }
+
+  parsed
+}
+
 ###################### 1. PATHS ######################
 
 path_israel   <- study3_raw_path("israeli.csv")
 path_smallmap <- study3_metadata_path("02_small_map.xlsx")
+path_israel_endpoints <- profid_dataset_path(
+  "local", "israeli-icd", "data", "working",
+  "03-stage-1-endpoints-and-comp-risks.csv"
+)
 
 dt_israel <- fread(path_israel)
 
@@ -63,47 +80,9 @@ dt_israel[, death_flag :=
 
 ###################### 4. DATE PARSING ######################
 
-dt_israel[, icd_implant_date := suppressWarnings(
-  as.IDate(icd_implant_date, format = "%b %d, %Y")
-)]
-dt_israel[is.na(icd_implant_date),
-          icd_implant_date := suppressWarnings(
-            as.IDate(icd_implant_date, format = "%d-%b-%y")
-          )]
-
-dt_israel[, icd_implant_date := as.IDate(
-  ifelse(!is.na(year(icd_implant_date)) & year(icd_implant_date) < 2000,
-         paste0("20", format(icd_implant_date, "%y-%m-%d")),
-         format(icd_implant_date, "%Y-%m-%d"))
-)]
-
-dt_israel[, death_date := suppressWarnings(
-  as.IDate(death_date, format = "%d-%b-%y")
-)]
-dt_israel[is.na(death_date),
-          death_date := suppressWarnings(
-            as.IDate(death_date, format = "%b %d, %Y")
-          )]
-
-dt_israel[, death_date := as.IDate(
-  ifelse(!is.na(year(death_date)) & year(death_date) < 2000,
-         paste0("20", format(death_date, "%y-%m-%d")),
-         format(death_date, "%Y-%m-%d"))
-)]
-
-dt_israel[, last_fu_date := suppressWarnings(
-  as.IDate(last_fu_date, format = "%b %d, %Y")
-)]
-dt_israel[is.na(last_fu_date),
-          last_fu_date := suppressWarnings(
-            as.IDate(last_fu_date, format = "%d-%b-%y")
-          )]
-
-dt_israel[, last_fu_date := as.IDate(
-  ifelse(!is.na(year(last_fu_date)) & year(last_fu_date) < 2000,
-         paste0("20", format(last_fu_date, "%y-%m-%d")),
-         format(last_fu_date, "%Y-%m-%d"))
-)]
+dt_israel[, icd_implant_date := parse_israel_date(icd_implant_date)]
+dt_israel[, death_date := parse_israel_date(death_date)]
+dt_israel[, last_fu_date := parse_israel_date(last_fu_date)]
 
 ###################### 5. TIME VARIABLES ######################
 
@@ -142,6 +121,53 @@ dt_israel[, t_followup_days :=
 ]
 
 dt_israel[t_followup_days < 0, t_followup_days := NA]
+
+# The raw Israel extract has sparse implant dates, so date subtraction cannot
+# recover follow-up for most Study 3 participants. Use the validated Israel
+# endpoint file's all-cause follow-up time (days to death or last contact).
+if (!file.exists(path_israel_endpoints)) {
+  stop(
+    sprintf(
+      "Israel endpoint file required for follow-up was not found: %s",
+      path_israel_endpoints
+    ),
+    call. = FALSE
+  )
+}
+
+dt_israel_endpoints <- fread(
+  path_israel_endpoints,
+  select = c("ID", "Alive_last_FU_days", "Status_death")
+)
+setnames(
+  dt_israel_endpoints,
+  c("ID", "Alive_last_FU_days", "Status_death"),
+  c("patient_id", "t_followup_days_israel", "death_status_israel")
+)
+dt_israel_endpoints[, patient_id := suppressWarnings(as.integer(patient_id))]
+dt_israel_endpoints[, t_followup_days_israel := as.numeric(t_followup_days_israel)]
+dt_israel_endpoints <- unique(dt_israel_endpoints, by = "patient_id")
+
+dt_israel[
+  dt_israel_endpoints,
+  on = "patient_id",
+  `:=`(
+    t_followup_days_israel = i.t_followup_days_israel,
+    death_status_israel = i.death_status_israel
+  )
+]
+dt_israel[
+  !is.na(t_followup_days_israel) & t_followup_days_israel > 0,
+  t_followup_days := t_followup_days_israel
+]
+dt_israel[
+  !is.na(death_status_israel),
+  death_flag := fifelse(death_status_israel == 1L, "yes", "no")
+]
+dt_israel[
+  death_status_israel == 1L & !is.na(t_followup_days_israel),
+  days_to_death := t_followup_days_israel
+]
 
 ###################### 8. DIAGNOSTICS (UNCHANGED) ######################
 
@@ -188,6 +214,7 @@ event_vars <- c(
   "last_fu_date",
   "last_fu_days",
   "t_followup_days",
+  "t_followup_days_israel",
   "sudden_cardiac_death_flag"
 )
 
@@ -222,10 +249,27 @@ library(readxl)
 library(stringr)
 library(lubridate)
 
+parse_israel_date <- function(x) {
+  raw <- trimws(as.character(x))
+  raw[raw == ""] <- NA_character_
+  parsed <- as.IDate(rep(NA_character_, length(raw)))
+
+  for (date_format in c("%b %d, %Y", "%d-%b-%y", "%d%b%Y", "%Y-%m-%d")) {
+    missing <- is.na(parsed) & !is.na(raw)
+    parsed[missing] <- suppressWarnings(as.IDate(raw[missing], format = date_format))
+  }
+
+  parsed
+}
+
 ###################### 1. PATHS ######################
 
 path_israel   <- study3_raw_path("israeli.csv")
 path_smallmap <- study3_metadata_path("02_small_map.xlsx")
+path_israel_endpoints <- profid_dataset_path(
+  "local", "israeli-icd", "data", "working",
+  "03-stage-1-endpoints-and-comp-risks.csv"
+)
 
 dt_israel <- fread(path_israel)
 
@@ -274,47 +318,9 @@ dt_israel[, death_flag :=
 
 ###################### 4. DATE PARSING ######################
 
-dt_israel[, icd_implant_date := suppressWarnings(
-  as.IDate(icd_implant_date, format = "%b %d, %Y")
-)]
-dt_israel[is.na(icd_implant_date),
-          icd_implant_date := suppressWarnings(
-            as.IDate(icd_implant_date, format = "%d-%b-%y")
-          )]
-
-dt_israel[, icd_implant_date := as.IDate(
-  ifelse(!is.na(year(icd_implant_date)) & year(icd_implant_date) < 2000,
-         paste0("20", format(icd_implant_date, "%y-%m-%d")),
-         format(icd_implant_date, "%Y-%m-%d"))
-)]
-
-dt_israel[, death_date := suppressWarnings(
-  as.IDate(death_date, format = "%d-%b-%y")
-)]
-dt_israel[is.na(death_date),
-          death_date := suppressWarnings(
-            as.IDate(death_date, format = "%b %d, %Y")
-          )]
-
-dt_israel[, death_date := as.IDate(
-  ifelse(!is.na(year(death_date)) & year(death_date) < 2000,
-         paste0("20", format(death_date, "%y-%m-%d")),
-         format(death_date, "%Y-%m-%d"))
-)]
-
-dt_israel[, last_fu_date := suppressWarnings(
-  as.IDate(last_fu_date, format = "%b %d, %Y")
-)]
-dt_israel[is.na(last_fu_date),
-          last_fu_date := suppressWarnings(
-            as.IDate(last_fu_date, format = "%d-%b-%y")
-          )]
-
-dt_israel[, last_fu_date := as.IDate(
-  ifelse(!is.na(year(last_fu_date)) & year(last_fu_date) < 2000,
-         paste0("20", format(last_fu_date, "%y-%m-%d")),
-         format(last_fu_date, "%Y-%m-%d"))
-)]
+dt_israel[, icd_implant_date := parse_israel_date(icd_implant_date)]
+dt_israel[, death_date := parse_israel_date(death_date)]
+dt_israel[, last_fu_date := parse_israel_date(last_fu_date)]
 
 ###################### 5. TIME VARIABLES ######################
 
@@ -353,6 +359,53 @@ dt_israel[, t_followup_days :=
 ]
 
 dt_israel[t_followup_days < 0, t_followup_days := NA]
+
+# The raw Israel extract has sparse implant dates, so date subtraction cannot
+# recover follow-up for most Study 3 participants. Use the validated Israel
+# endpoint file's all-cause follow-up time (days to death or last contact).
+if (!file.exists(path_israel_endpoints)) {
+  stop(
+    sprintf(
+      "Israel endpoint file required for follow-up was not found: %s",
+      path_israel_endpoints
+    ),
+    call. = FALSE
+  )
+}
+
+dt_israel_endpoints <- fread(
+  path_israel_endpoints,
+  select = c("ID", "Alive_last_FU_days", "Status_death")
+)
+setnames(
+  dt_israel_endpoints,
+  c("ID", "Alive_last_FU_days", "Status_death"),
+  c("patient_id", "t_followup_days_israel", "death_status_israel")
+)
+dt_israel_endpoints[, patient_id := suppressWarnings(as.integer(patient_id))]
+dt_israel_endpoints[, t_followup_days_israel := as.numeric(t_followup_days_israel)]
+dt_israel_endpoints <- unique(dt_israel_endpoints, by = "patient_id")
+
+dt_israel[
+  dt_israel_endpoints,
+  on = "patient_id",
+  `:=`(
+    t_followup_days_israel = i.t_followup_days_israel,
+    death_status_israel = i.death_status_israel
+  )
+]
+dt_israel[
+  !is.na(t_followup_days_israel) & t_followup_days_israel > 0,
+  t_followup_days := t_followup_days_israel
+]
+dt_israel[
+  !is.na(death_status_israel),
+  death_flag := fifelse(death_status_israel == 1L, "yes", "no")
+]
+dt_israel[
+  death_status_israel == 1L & !is.na(t_followup_days_israel),
+  days_to_death := t_followup_days_israel
+]
 
 ###################### 8. DIAGNOSTICS (UNCHANGED) ######################
 
@@ -399,6 +452,7 @@ event_vars <- c(
   "last_fu_date",
   "last_fu_days",
   "t_followup_days",
+  "t_followup_days_israel",
   "sudden_cardiac_death_flag"
 )
 

@@ -206,6 +206,21 @@ if (study3_debugging_enabled()) {
   )
 }
 
+israel_matched <- dt_final[dataset == "ISRAEL", .N]
+israel_positive_followup <- dt_final[
+  dataset == "ISRAEL" & !is.na(t_followup_days) & t_followup_days > 0,
+  .N
+]
+if (israel_matched > 0L && israel_positive_followup == 0L) {
+  stop(
+    paste(
+      "All matched Israel records have missing/non-positive follow-up.",
+      "Check the Israel endpoint supplement and follow-up mapping before modelling."
+    ),
+    call. = FALSE
+  )
+}
+
 cat("Final merged Study 3 dataset:", nrow(dt_final), "rows\n")
 table(dt_final$dataset, useNA = "ifany")
 unique(dt_lcv$patient_id)[1:30]

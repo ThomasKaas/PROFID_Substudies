@@ -71,7 +71,10 @@ if ("Stroke_TIA" %in% names(dt_final)) {
 ######## Univariable Cox screening (stratified by dataset)  ###############
 
 run_uv <- function(var) {
-  d <- dt_final[complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, get(var))])]
+  d <- dt_final[
+    t_followup_days_final > 0 &
+      complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, get(var))])
+  ]
   
   if (nrow(d) == 0) return(NULL)
   if (is.factor(d[[var]]) && nlevels(d[[var]]) < 2) return(NULL)
@@ -122,6 +125,7 @@ mv_vars <- c("device_group","age_icd","Sex","LVEF","Diabetes")
 mv_vars <- mv_vars[mv_vars %in% names(dt_final)]
 
 d_mv <- dt_final[complete.cases(dt_final[, c("t_followup_days_final","event_inapp_shock","dataset", mv_vars), with = FALSE])]
+d_mv <- d_mv[t_followup_days_final > 0]
 
 f_mv <- as.formula(
   paste0("Surv(t_followup_days_final, event_inapp_shock) ~ ",
@@ -146,7 +150,10 @@ cat("\nHarrell's C (MV Cox): ", round(s_mv$concordance[1], 3),
 run_interaction <- function(subvar) {
   if (!(subvar %in% names(dt_final))) return(NULL)
   
-  d <- dt_final[complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, device_group, get(subvar))])]
+  d <- dt_final[
+    t_followup_days_final > 0 &
+      complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, device_group, get(subvar))])
+  ]
   if (nrow(d) == 0) return(NULL)
   
   if (!is.factor(d[[subvar]]) && !is.numeric(d[[subvar]]) && !is.integer(d[[subvar]])) return(NULL)

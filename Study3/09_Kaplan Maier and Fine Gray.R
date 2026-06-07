@@ -469,7 +469,11 @@ names(dt_final)
 # 2 = death before inapproiate shock - competing
 dt_final[, fg_event := 0L]
 dt_final[event_inapp_shock == 1, fg_event := 1L]
-dt_final[event_inapp_shock == 0 & death_flag == "Yes", fg_event := 2L]
+dt_final[
+  event_inapp_shock == 0 &
+    tolower(trimws(as.character(death_flag))) == "yes",
+  fg_event := 2L
+]
 
 # QC  
 cat("N =", nrow(dt_final), "\n")

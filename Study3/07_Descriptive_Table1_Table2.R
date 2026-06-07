@@ -134,17 +134,15 @@ print(
 
 ####### COHORT 2: DEVICE COMPARISON / INFERENTIAL ANALYSES
 
-dt_desc[, t_followup_days_final := NA_real_]
+dt_desc[, t_followup_days_final := suppressWarnings(as.numeric(t_followup_days))]
 
-# Israel-specific follow-up (if present)
+# Prefer validated Israel-specific follow-up when available.
 if ("t_followup_days_israel" %in% names(dt_desc)) {
-  dt_desc[dataset == "ISRAEL",
-          t_followup_days_final := t_followup_days_israel]
+  dt_desc[
+    dataset == "ISRAEL" & !is.na(t_followup_days_israel),
+    t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_israel))
+  ]
 }
-
-# All other datasets
-dt_desc[dataset != "ISRAEL",
-        t_followup_days_final := t_followup_days]
 
 dt_analysis <- dt_desc
 
@@ -308,17 +306,15 @@ fwrite(followup_summary, study3_output_path("followup_summary_by_device.csv"))
 ######################### Table 2 #######################
 
 
-dt_desc[, t_followup_days_final := NA_real_]
+dt_desc[, t_followup_days_final := suppressWarnings(as.numeric(t_followup_days))]
 
-# Israel-specific follow-up (if present)
+# Prefer validated Israel-specific follow-up when available.
 if ("t_followup_days_israel" %in% names(dt_desc)) {
-  dt_desc[dataset == "ISRAEL",
-          t_followup_days_final := t_followup_days_israel]
+  dt_desc[
+    dataset == "ISRAEL" & !is.na(t_followup_days_israel),
+    t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_israel))
+  ]
 }
-
-# All other datasets
-dt_desc[dataset != "ISRAEL",
-        t_followup_days_final := t_followup_days]
 
 dt_analysis <- dt_desc
 
