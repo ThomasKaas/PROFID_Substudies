@@ -12,13 +12,13 @@ The runner has two path modes:
 | Mode | Command flag | Raw-data root | Derived intermediates | Analysis outputs |
 |---|---|---|---|---|
 | Default/HPC | none | `/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data` | `<HPC data root>/derived/Study3` | `Study3/outputs` |
-| Local | `--local` | `/Users/thomaskaas/PROFID_RAW_DATA` | `/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3` | `Study3/outputs` |
+| Local | `--local` | `/Users/PROFID_RAW_DATA` | `/Users/PROFID_RAW_DATA/derived/Study3` | `Study3/outputs` |
 
 The local raw-data root is selected only when `--local` is present. Local mode
-checks that `/Users/thomaskaas/PROFID_RAW_DATA` exists before running. It reads
+checks that `/Users/PROFID_RAW_DATA` exists before running. It reads
 the registry files from their dataset-specific folders and reads `ICD.csv` from
 `Data Transfer to Charite/`. Derived Study 3 datasets are written to
-`/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`.
+`/Users/PROFID_RAW_DATA/derived/Study3`.
 
 ## Running The Pipeline
 
@@ -61,7 +61,7 @@ Options can be combined in any order:
 
 | Option | Effect |
 |---|---|
-| `--local` | Use `/Users/thomaskaas/PROFID_RAW_DATA` for raw inputs. |
+| `--local` | Use `/Users/PROFID_RAW_DATA` for raw inputs. |
 | `--debugging` | Print detailed cohort, field, and model-input diagnostics. |
 | `--dry-run` | Print selected scripts without executing them. |
 | `--stage <name>` | Run one stage: `all`, `preprocessing`, `analysis`, `descriptive`, `modeling`, `sensitivity`, or `imputation`. |
@@ -84,8 +84,8 @@ Rscript Study3/master_run.R --local --from preprocess_israel --to km_fine_gray -
 
 The runner and numbered scripts use `Study3/study3_paths.R`.
 
-- `--local` sets `PROFID_DATA_ROOT=/Users/thomaskaas/PROFID_RAW_DATA`.
-- `--local` sets `PROFID_STUDY3_DERIVED_ROOT=/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`.
+- `--local` sets `PROFID_DATA_ROOT=/Users/PROFID_RAW_DATA`.
+- `--local` sets `PROFID_STUDY3_DERIVED_ROOT=/Users/PROFID_RAW_DATA/derived/Study3`.
 - `--debugging` sets `STUDY3_DEBUGGING=1`.
 - `PROFID_STUDY3_OUTPUT_ROOT` can override the output directory.
 - `PROFID_STUDY3_RAW_ROOT`, `PROFID_STUDY3_DERIVED_ROOT`, and
@@ -160,5 +160,5 @@ Verify the local raw-data paths without running the analysis:
 
 ```bash
 Rscript Study3/master_run.R --local --dry-run
-PROFID_DATA_ROOT=/Users/thomaskaas/PROFID_RAW_DATA PROFID_STUDY3_DERIVED_ROOT=/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3 Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Helius.xlsx","israeli.csv","prose.xlsx","LCV.xlsx","PROSE_LCVcommon participant.csv"); for (f in files) cat(f, "->", study3_raw_path(f), "\n"); cat("ICD.csv ->", profid_transfer_path("ICD.csv"), "\n"); cat("Derived datasets ->", study3_derived_root(), "\n")'
+PROFID_DATA_ROOT=/Users/PROFID_RAW_DATA PROFID_STUDY3_DERIVED_ROOT=/Users/PROFID_RAW_DATA/derived/Study3 Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Helius.xlsx","israeli.csv","prose.xlsx","LCV.xlsx","PROSE_LCVcommon participant.csv"); for (f in files) cat(f, "->", study3_raw_path(f), "\n"); cat("ICD.csv ->", profid_transfer_path("ICD.csv"), "\n"); cat("Derived datasets ->", study3_derived_root(), "\n")'
 ```

@@ -21,7 +21,7 @@ usage <- function(status = 0L) {
     "Options:\n",
     "  --help                    Show this help text.\n",
     "  --dry-run                 Print the selected scripts without running them.\n",
-    "  --local                   Use /Users/thomaskaas/PROFID_RAW_DATA for raw inputs.\n",
+    "  --local                   Use /Users/PROFID_RAW_DATA for raw inputs.\n",
     "  --debugging               Print detailed cohort, field, and model-input diagnostics.\n",
     "  --stage <name>            Run one stage: all, preprocessing, analysis,\n",
     "                            descriptive, modeling, sensitivity, imputation.\n",
@@ -208,7 +208,7 @@ old_wd <- getwd()
 setwd(repo_root)
 on.exit(setwd(old_wd), add = TRUE)
 
-local_data_root <- "/Users/thomaskaas/PROFID_RAW_DATA"
+local_data_root <- "/Users/PROFID_RAW_DATA"
 local_derived_root <- file.path(local_data_root, "derived", "Study3")
 if (local) {
   if (!dir.exists(local_data_root)) {

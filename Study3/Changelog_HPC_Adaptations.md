@@ -22,14 +22,14 @@ Rscript Study3/master_run.R --local
 
 The `--local` flag is opt-in. Only when it is present, the runner:
 
-- checks that `/Users/thomaskaas/PROFID_RAW_DATA` exists
-- sets `PROFID_DATA_ROOT` to `/Users/thomaskaas/PROFID_RAW_DATA`
+- checks that `/Users/PROFID_RAW_DATA` exists
+- sets `PROFID_DATA_ROOT` to `/Users/PROFID_RAW_DATA`
 - resolves the original registry files under
-  `/Users/thomaskaas/PROFID_RAW_DATA/datasets/local/...`
+  `/Users/PROFID_RAW_DATA/datasets/local/...`
 - resolves `ICD.csv` under
-  `/Users/thomaskaas/PROFID_RAW_DATA/Data Transfer to Charite/`
+  `/Users/PROFID_RAW_DATA/Data Transfer to Charite/`
 - writes derived Study 3 intermediates to
-  `/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`
+  `/Users/PROFID_RAW_DATA/derived/Study3`
 
 Without `--local`, the default/HPC path behavior is unchanged.
 
@@ -236,7 +236,7 @@ Each file should resolve to an existing path and print `TRUE`.
 From the repository root:
 
 ```bash
-PROFID_DATA_ROOT=/Users/thomaskaas/PROFID_RAW_DATA PROFID_STUDY3_DERIVED_ROOT=/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3 Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Helius.xlsx","israeli.csv","prose.xlsx","LCV.xlsx","PROSE_LCVcommon participant.csv"); for (f in files) cat(f, "->", study3_raw_path(f), file.exists(study3_raw_path(f)), "\n"); cat("ICD.csv ->", profid_transfer_path("ICD.csv"), file.exists(profid_transfer_path("ICD.csv")), "\n"); cat("Derived datasets ->", study3_derived_root(), "\n")'
+PROFID_DATA_ROOT=/Users/PROFID_RAW_DATA PROFID_STUDY3_DERIVED_ROOT=/Users/PROFID_RAW_DATA/derived/Study3 Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Helius.xlsx","israeli.csv","prose.xlsx","LCV.xlsx","PROSE_LCVcommon participant.csv"); for (f in files) cat(f, "->", study3_raw_path(f), file.exists(study3_raw_path(f)), "\n"); cat("ICD.csv ->", profid_transfer_path("ICD.csv"), file.exists(profid_transfer_path("ICD.csv")), "\n"); cat("Derived datasets ->", study3_derived_root(), "\n")'
 ```
 
 ## How To Run

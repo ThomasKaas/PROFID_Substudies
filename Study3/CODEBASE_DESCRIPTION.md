@@ -35,7 +35,7 @@ Top-level files in `Study3/` are organised as numbered R scripts:
 Only mapping workbooks and scripts are present in this checkout. Raw data are
 kept outside the repository. In default/HPC mode they are resolved below the
 HPC data root. With `Study3/master_run.R --local`, they are resolved below
-`/Users/thomaskaas/PROFID_RAW_DATA`.
+`/Users/PROFID_RAW_DATA`.
 
 ## High-Level Workflow
 
@@ -84,12 +84,12 @@ The runner supports two path modes:
 | Mode | Selection | Raw inputs | Derived intermediates | Outputs |
 |---|---|---|---|---|
 | Default/HPC | no mode flag | HPC data root | `<HPC data root>/derived/Study3` | `Study3/outputs` |
-| Local | `--local` | `/Users/thomaskaas/PROFID_RAW_DATA` | `/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3` | `Study3/outputs` |
+| Local | `--local` | `/Users/PROFID_RAW_DATA` | `/Users/PROFID_RAW_DATA/derived/Study3` | `Study3/outputs` |
 
 `--local` is opt-in and checks that the local raw-data root exists. It sets
 `PROFID_DATA_ROOT` for raw-file aliases and sets
 `PROFID_STUDY3_DERIVED_ROOT` to
-`/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`. Without `--local`, the
+`/Users/PROFID_RAW_DATA/derived/Study3`. Without `--local`, the
 default/HPC configuration is unchanged.
 
 The local layout resolves registry inputs under `datasets/local/...` and
