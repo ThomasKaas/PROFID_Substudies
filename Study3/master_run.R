@@ -8,6 +8,8 @@
 #   Rscript Study3/master_run.R --stage analysis
 #   Rscript Study3/master_run.R --from merge --to descriptive
 #   Rscript Study3/master_run.R --dry-run
+#   Rscript Study3/master_run.R --local
+#   Rscript Study3/master_run.R --local --debugging
 #   Rscript Study3/master_run.R --debugging
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -19,6 +21,7 @@ usage <- function(status = 0L) {
     "Options:\n",
     "  --help                    Show this help text.\n",
     "  --dry-run                 Print the selected scripts without running them.\n",
+    "  --local                   Use /Users/thomaskaas/PROFID_RAW_DATA for raw inputs.\n",
     "  --debugging               Print detailed cohort, field, and model-input diagnostics.\n",
     "  --stage <name>            Run one stage: all, preprocessing, analysis,\n",
     "                            descriptive, modeling, sensitivity, imputation.\n",
@@ -117,6 +120,7 @@ from_id <- NULL
 to_id <- NULL
 only_ids <- NULL
 dry_run <- FALSE
+local <- FALSE
 debugging <- FALSE
 continue_on_error <- FALSE
 
@@ -128,6 +132,8 @@ while (i <= length(args)) {
     usage(0L)
   } else if (arg == "--dry-run") {
     dry_run <- TRUE
+  } else if (arg == "--local") {
+    local <- TRUE
   } else if (arg == "--debugging") {
     debugging <- TRUE
   } else if (arg == "--continue-on-error") {
@@ -201,6 +207,18 @@ repo_root <- repo_root_from_script()
 old_wd <- getwd()
 setwd(repo_root)
 on.exit(setwd(old_wd), add = TRUE)
+
+local_data_root <- "/Users/thomaskaas/PROFID_RAW_DATA"
+local_derived_root <- file.path(local_data_root, "derived", "Study3")
+if (local) {
+  if (!dir.exists(local_data_root)) {
+    stop(sprintf("Local data root does not exist: %s", local_data_root), call. = FALSE)
+  }
+  Sys.setenv(
+    PROFID_DATA_ROOT = local_data_root,
+    PROFID_STUDY3_DERIVED_ROOT = local_derived_root
+  )
+}
 
 Sys.setenv(STUDY3_DEBUGGING = if (debugging) "1" else "0")
 
@@ -308,6 +326,11 @@ if (length(missing_scripts)) {
 cat("Study3 master run\n")
 cat(sprintf("Repository root: %s\n", repo_root))
 cat(sprintf("R library path: %s\n", r_libs_user))
+cat(sprintf("Execution mode: %s\n", if (local) "local" else "default/HPC"))
+if (local) {
+  cat(sprintf("Local raw-data root: %s\n", local_data_root))
+  cat(sprintf("Local derived-data root: %s\n", local_derived_root))
+}
 cat(sprintf("Debugging output: %s\n", if (debugging) "enabled" else "disabled"))
 cat(sprintf("Selected scripts: %d\n\n", nrow(selected)))
 

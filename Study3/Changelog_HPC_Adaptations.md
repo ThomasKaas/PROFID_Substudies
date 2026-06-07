@@ -12,6 +12,40 @@ Study 3 was adapted to run on the PROFID HPC using the same execution pattern as
 
 No statistical analysis logic, model formula, filtering rule, endpoint definition, or transformation was intentionally changed.
 
+## Local Execution Mode
+
+`Study3/master_run.R` also supports a local execution mode:
+
+```bash
+Rscript Study3/master_run.R --local
+```
+
+The `--local` flag is opt-in. Only when it is present, the runner:
+
+- checks that `/Users/thomaskaas/PROFID_RAW_DATA` exists
+- sets `PROFID_DATA_ROOT` to `/Users/thomaskaas/PROFID_RAW_DATA`
+- resolves the original registry files under
+  `/Users/thomaskaas/PROFID_RAW_DATA/datasets/local/...`
+- resolves `ICD.csv` under
+  `/Users/thomaskaas/PROFID_RAW_DATA/Data Transfer to Charite/`
+- writes derived Study 3 intermediates to
+  `/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`
+
+Without `--local`, the default/HPC path behavior is unchanged.
+
+The flag is independent of the other runner options and can be combined with
+debugging, dry runs, stages, and step selection:
+
+```bash
+Rscript Study3/master_run.R --local --debugging
+Rscript Study3/master_run.R --local --dry-run
+Rscript Study3/master_run.R --local --from preprocess_israel --to km_fine_gray --debugging
+```
+
+This is a path-configuration change only. It does not change the pipeline
+order, source scripts, cohort definitions, endpoint definitions, models, or
+statistical methods.
+
 ## Raw Data Path Issue
 
 The original Study 3 scripts used short local filenames such as `eu-cert-icd.csv`, `Helius.xlsx`, and `prose.xlsx`.
@@ -27,16 +61,16 @@ To keep the Study 3 scripts unchanged, `study3_paths.R` now maps the short Study
 
 ## Raw File Mapping
 
-| Study 3 requested file | Actual HPC file now loaded |
+| Study 3 requested file | Path relative to the selected data root |
 |---|---|
-| `eu-cert-icd.csv` | `data/datasets/local/eu-cert-icd/data/original/registry_data_eu-cert-icd_selection_161019-Data-sheet.csv` |
-| `Helius.xlsx` | `data/datasets/local/helios-rdb/data/original/Final_delivery.2021-05-20._Ali EDxlsx.xlsx` |
-| `israeli.csv` | `data/datasets/local/israeli-icd/data/original/ICDALL_20170630.csv` |
-| `prose.xlsx` | `data/datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_no_password.xlsx` |
-| `LCV.xlsx` | `data/datasets/local/prose-lvscd/data/original/FinaltoPROFID_LVSCDonlySent_no_password.xlsx` |
-| `PROSE_LCVcommon participant.csv` | `data/datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_coenrolled.csv` |
-| `ICD.csv` | `data/Data_Transfer_to_Charite/ICD.csv` |
-| `02_small_map.xlsx` | `Study3/02_small_map.xlsx` |
+| `eu-cert-icd.csv` | `datasets/local/eu-cert-icd/data/original/registry_data_eu-cert-icd_selection_161019-Data-sheet.csv` |
+| `Helius.xlsx` | `datasets/local/helios-rdb/data/original/Final_delivery.2021-05-20._Ali EDxlsx.xlsx` |
+| `israeli.csv` | `datasets/local/israeli-icd/data/original/ICDALL_20170630.csv` |
+| `prose.xlsx` | `datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_no_password.xlsx` |
+| `LCV.xlsx` | `datasets/local/prose-lvscd/data/original/FinaltoPROFID_LVSCDonlySent_no_password.xlsx` |
+| `PROSE_LCVcommon participant.csv` | `datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_coenrolled.csv` |
+| `ICD.csv` | HPC: `Data_Transfer_to_Charite/ICD.csv`; local: `Data Transfer to Charite/ICD.csv` |
+| `02_small_map.xlsx` | Repository path: `Study3/02_small_map.xlsx` |
 
 ## Important Note
 
@@ -197,15 +231,23 @@ Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Heliu
 
 Each file should resolve to an existing path and print `TRUE`.
 
+## How To Check Paths Locally
+
+From the repository root:
+
+```bash
+PROFID_DATA_ROOT=/Users/thomaskaas/PROFID_RAW_DATA PROFID_STUDY3_DERIVED_ROOT=/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3 Rscript -e 'source("Study3/study3_paths.R"); files <- c("eu-cert-icd.csv","Helius.xlsx","israeli.csv","prose.xlsx","LCV.xlsx","PROSE_LCVcommon participant.csv"); for (f in files) cat(f, "->", study3_raw_path(f), file.exists(study3_raw_path(f)), "\n"); cat("ICD.csv ->", profid_transfer_path("ICD.csv"), file.exists(profid_transfer_path("ICD.csv")), "\n"); cat("Derived datasets ->", study3_derived_root(), "\n")'
+```
+
 ## How To Run
 
-Dry run:
+Default/HPC dry run:
 
 ```bash
 Rscript Study3/master_run.R --dry-run
 ```
 
-Full run:
+Default/HPC full run:
 
 ```bash
 Rscript Study3/master_run.R
@@ -215,6 +257,24 @@ Slurm wrapper:
 
 ```bash
 ./Study3/run_study3.sh
+```
+
+Local dry run:
+
+```bash
+Rscript Study3/master_run.R --local --dry-run
+```
+
+Local full run:
+
+```bash
+Rscript Study3/master_run.R --local
+```
+
+Local full run with detailed diagnostics:
+
+```bash
+Rscript Study3/master_run.R --local --debugging
 ```
 
 ## Detailed Master-Run Debugging Output

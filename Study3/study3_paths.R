@@ -1,7 +1,7 @@
 # Shared path helpers for Study3.
 #
-# Defaults are set for the PROFID HPC repository layout, with environment
-# variables available for local or test runs.
+# Defaults are set for the PROFID HPC repository layout. The master runner's
+# --local mode and explicit environment variables support local or test runs.
 
 .study3_current_file <- function() {
   frames <- sys.frames()
@@ -102,6 +102,7 @@ profid_transfer_path <- function(...) {
   candidates <- file.path(
     c(
       profid_data_path("Data_Transfer_to_Charite"),
+      profid_data_path("Data Transfer to Charite"),
       study3_repo_root(),
       file.path(study3_repo_root(), "Study3"),
       study3_raw_root()

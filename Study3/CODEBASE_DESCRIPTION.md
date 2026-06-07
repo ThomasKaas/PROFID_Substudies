@@ -23,14 +23,19 @@ Top-level files in `Study3/` are organised as numbered R scripts:
 | `10_secondary analysis.R` | Runs secondary Cox analyses, covariate screening, multivariable models, and subgroup interactions. |
 | `11_sensitivty analysis (180 days).R` | Runs a 180-day minimum follow-up sensitivity analysis. |
 | `12_MICE.R` | Runs SAP-style multiple imputation sensitivity analysis for covariates with less than 30 percent missingness. |
-| `README.md` | Short repository note. |
+| `master_run.R` | Canonical sequential runner with default/HPC, local, debugging, and step-selection modes. |
+| `run_study3.sh` | Slurm submission wrapper that forwards runner options. |
+| `study3_paths.R` | Shared path, debugging, endpoint, and graphics helpers. |
+| `README.md` | Operational execution and path documentation. |
+| `Changelog_HPC_Adaptations.md` | Execution, path, and HPC adaptation history. |
+| `CODEBASE_DESCRIPTION.md` | Detailed workflow and codebase reference. |
 | `01_master_map.xlsx` | Broad variable mapping workbook. |
 | `02_small_map.xlsx` | Smaller harmonisation map used by the cleaning scripts. |
-| `Study3/metadata/01_master_map.xlsx` | Nested copy of the master map. |
-| `Study3/metadata/02_small_map.xlsx` | Nested copy of the small map. |
-| `Study3/metadata/README.md` | Metadata folder description. |
 
-Only mapping workbooks and scripts are present in this checkout. The raw data files expected by the scripts, such as `eu-cert-icd.csv`, `Helius.xlsx`, `israeli.csv`, `prose.xlsx`, `LCV.xlsx`, `ICD.csv`, and `PROSE_LCVcommon participant.csv`, are not present.
+Only mapping workbooks and scripts are present in this checkout. Raw data are
+kept outside the repository. In default/HPC mode they are resolved below the
+HPC data root. With `Study3/master_run.R --local`, they are resolved below
+`/Users/thomaskaas/PROFID_RAW_DATA`.
 
 ## High-Level Workflow
 
@@ -65,7 +70,7 @@ The descriptive script also writes the same analysis cohort as
 `study3_analysis_final.rds`, which is the filename loaded by later modelling
 scripts.
 
-## Master Runner And Debugging Mode
+## Master Runner, Execution Modes, And Debugging
 
 `Study3/master_run.R` runs the numbered Study 3 scripts in order and writes a
 timestamped master log to:
@@ -74,8 +79,32 @@ timestamped master log to:
 Study3/outputs/master_run_<timestamp>.txt
 ```
 
-The runner supports the normal stage-selection options and an additional
-diagnostic mode:
+The runner supports two path modes:
+
+| Mode | Selection | Raw inputs | Derived intermediates | Outputs |
+|---|---|---|---|---|
+| Default/HPC | no mode flag | HPC data root | `<HPC data root>/derived/Study3` | `Study3/outputs` |
+| Local | `--local` | `/Users/thomaskaas/PROFID_RAW_DATA` | `/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3` | `Study3/outputs` |
+
+`--local` is opt-in and checks that the local raw-data root exists. It sets
+`PROFID_DATA_ROOT` for raw-file aliases and sets
+`PROFID_STUDY3_DERIVED_ROOT` to
+`/Users/thomaskaas/PROFID_RAW_DATA/derived/Study3`. Without `--local`, the
+default/HPC configuration is unchanged.
+
+The local layout resolves registry inputs under `datasets/local/...` and
+`ICD.csv` under `Data Transfer to Charite/`. The HPC layout uses
+`Data_Transfer_to_Charite/` for the transfer directory.
+
+The local flag can be combined with debugging and all normal selection options:
+
+```bash
+Rscript Study3/master_run.R --local
+Rscript Study3/master_run.R --local --debugging
+Rscript Study3/master_run.R --local --from preprocess_israel --to km_fine_gray --debugging
+```
+
+The additional diagnostic mode is:
 
 ```bash
 Rscript Study3/master_run.R --debugging
@@ -134,6 +163,10 @@ The detailed reports trace the complete Israel-to-model path:
 Debug mode is reporting-only. It does not alter values, filtering rules,
 cohort definitions, endpoints, models, or statistical methods.
 
+The runner also supports `--dry-run`, `--stage`, `--from`, `--to`, `--only`,
+and `--continue-on-error`. Run `Rscript Study3/master_run.R --help` for the
+complete option and step-ID list.
+
 ## R Package Dependencies
 
 Across the codebase, the scripts use:
@@ -155,12 +188,17 @@ Most scripts include commented `install.packages()` calls, but there is no proje
 
 The mapping files define source-specific variable names and harmonised Study 3 names.
 
-The cleaning scripts consistently read:
+The cleaning scripts resolve the mapping workbook through the shared path
+helper:
 
 ```r
-path_smallmap <- "metadata/02_small_map.xlsx"
+path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 map_small <- as.data.table(read_excel(path_smallmap, sheet = 1))
 ```
+
+By default, `study3_metadata_path()` finds the committed top-level
+`Study3/02_small_map.xlsx`. `PROFID_STUDY3_METADATA_ROOT` can explicitly
+override the metadata location.
 
 The small map contains columns such as:
 
@@ -190,7 +228,10 @@ Examples of harmonised target variables visible from the workbook and scripts in
 - `t_followup_days`
 - `sudden_cardiac_death_flag`
 
-Important path issue: the scripts expect `metadata/02_small_map.xlsx` relative to the working directory. In this checkout, the metadata directory appears at `Study3/Study3/metadata/`, not `Study3/metadata/`. There are also top-level copies of the workbooks in `Study3/`. To run the scripts as written, the working directory and metadata placement need to be aligned.
+The mapping workbook path is resolved by `study3_metadata_path()`, so the
+numbered scripts use the committed `Study3/02_small_map.xlsx` regardless of
+whether the master runner is started from the repository root or another
+working directory.
 
 ## Source-Specific Cleaning Scripts
 
@@ -199,7 +240,7 @@ Important path issue: the scripts expect `metadata/02_small_map.xlsx` relative t
 Input:
 
 - `eu-cert-icd.csv`
-- `metadata/02_small_map.xlsx`
+- `02_small_map.xlsx`, resolved by `study3_metadata_path()`
 
 Main steps:
 
@@ -238,7 +279,7 @@ Notable detail:
 Input:
 
 - `Helius.xlsx`
-- `metadata/02_small_map.xlsx`
+- `02_small_map.xlsx`, resolved by `study3_metadata_path()`
 
 Main steps:
 
@@ -275,7 +316,7 @@ Notable detail:
 Input:
 
 - `israeli.csv`
-- `metadata/02_small_map.xlsx`
+- `02_small_map.xlsx`, resolved by `study3_metadata_path()`
 
 Main steps:
 
@@ -321,7 +362,7 @@ Notable detail:
 Input:
 
 - `prose.xlsx`
-- `metadata/02_small_map.xlsx`
+- `02_small_map.xlsx`, resolved by `study3_metadata_path()`
 
 Main steps:
 
@@ -347,7 +388,7 @@ Notable detail:
 Input:
 
 - `LCV.xlsx`
-- `metadata/02_small_map.xlsx`
+- `02_small_map.xlsx`, resolved by `study3_metadata_path()`
 
 Main steps:
 
@@ -442,6 +483,7 @@ Main outputs:
 - `followup_summary_by_device.csv`
 - `incidence_rates_per_100py_by_device_primary_all_datasets.csv`
 - `study3_analysis_cohort_v2_final_followup.rds`
+- `study3_analysis_final.rds`
 
 Main steps:
 
@@ -586,9 +628,7 @@ Main outputs:
 
 The Figure 1 changes are output-only. The KM CSV exports contain the Kaplan-Meier curve/censor/event data and the number-at-risk table used for the plot, so the figure can be reloaded and replotted independently. The Fine-Gray CSV export contains the original device-only `crr()` result and the additional dataset-adjusted `crr()` result. The original Fine-Gray model, endpoint definition, input cohort, filtering rule, and cumulative-incidence analysis are preserved.
 
-Important reproducibility issue:
-
-- The script reads `study3_analysis_final.rds`, which is not produced by the visible scripts.
+The input is produced by `07_Descriptive_Table1_Table2.R`.
 
 ## Secondary Analyses
 
@@ -633,9 +673,7 @@ Surv(t_followup_days_final, event_inapp_shock) ~
     - `AF_atrial_flutter`
 11. Performs stroke/TIA event-rate QC for separation.
 
-Important reproducibility issue:
-
-- The script reads `study3_analysis_final.rds`, which is not produced by the visible scripts.
+The input is produced by `07_Descriptive_Table1_Table2.R`.
 
 ## 180-Day Sensitivity Analysis
 
@@ -687,9 +725,7 @@ Surv(t_followup_days_final, event_inapp_shock) ~
 13. Writes cumulative incidence plot PNG.
 14. Saves the sensitivity cohort.
 
-Important reproducibility issue:
-
-- The script reads `study3_analysis_final.rds`, which is not produced by the visible scripts.
+The input is produced by `07_Descriptive_Table1_Table2.R`.
 
 ## Multiple Imputation Sensitivity Analysis
 
@@ -744,7 +780,6 @@ coxph(Surv(t_followup_days_final, event_inapp_shock) ~
 
 Important reproducibility issue:
 
-- The script reads `study3_analysis_final.rds`, which is not produced by the visible scripts.
 - Although the header says covariates with less than 30 percent missingness are imputed, the method assignments only actively impute `LVEF` with predictive mean matching in the visible code.
 
 ## Key Derived Variables
@@ -856,10 +891,6 @@ Kaplan-Meier / Fine-Gray outputs:
 - `figure_1_km_number_at_risk_wide_2200d.csv`
 - `finegray_primary_device_results.csv`
 
-Intermediate or expected files not produced in this checkout:
-
-- `study3_analysis_final.rds`
-
 ## Quality Control Embedded in Scripts
 
 The codebase includes several useful QC checks:
@@ -885,54 +916,49 @@ The codebase includes several useful QC checks:
 
 The following issues are visible from static code inspection:
 
-1. `study3_analysis_final.rds` is consumed but not produced.
-   - Scripts `09`, `10`, `11`, and `12` read this file.
-   - The visible producer writes `study3_analysis_cohort_v2_final_followup.rds`.
-
-2. Metadata path likely does not resolve from the top-level `Study3/` folder.
-   - Scripts read `metadata/02_small_map.xlsx`.
-   - This checkout contains `Study3/Study3/metadata/02_small_map.xlsx` and `Study3/02_small_map.xlsx`, but not `Study3/metadata/02_small_map.xlsx`.
-
-3. Raw input data are absent from this repository checkout.
+1. Raw input data are absent from this repository checkout.
    - This may be intentional for privacy, but it means the pipeline cannot be rerun from scratch as committed.
+   - The external data roots must be available in default/HPC mode or through
+     the opt-in `--local` mode.
 
-4. `03_israel_initial_cleaning.R` contains duplicated code.
+2. `03_israel_initial_cleaning.R` contains duplicated code.
    - The duplicated block starts over with `rm(list = ls())`.
    - Final output likely comes from the second copy, but maintenance risk is high.
 
-5. Israel-specific follow-up variable mismatch.
+3. Israel-specific follow-up variable mismatch.
    - Downstream code checks `t_followup_days_israel`.
    - The visible Israel cleaning script creates `t_followup_days`, not `t_followup_days_israel`.
 
-6. `06_Dataset_merging.R` and `06_Dataset_merging_updated.R` are near-duplicates.
+4. `06_Dataset_merging.R` and `06_Dataset_merging_updated.R` are near-duplicates.
    - Only the updated file includes `t_followup_days_israel` in `vars_events`.
    - This increases risk of running the wrong version.
 
-7. `Status` versus `status` naming may be inconsistent.
+5. `Status` versus `status` naming may be inconsistent.
    - Cleaning scripts create lowercase `status`.
    - The descriptive script checks for uppercase `Status` when creating `new_Status3`.
 
-8. PROSE follow-up may become infinite if all event times are missing.
+6. PROSE follow-up may become infinite if all event times are missing.
    - `pmax(..., na.rm = TRUE)` returns `-Inf` when all values are missing.
    - The LCV script handles this explicitly; the PROSE script does not.
 
-9. Missing inappropriate shock flags are treated as no event.
+7. Missing inappropriate shock flags are treated as no event.
    - This is implemented deliberately in descriptive and Cox scripts.
    - It is analytically important and should be justified in the SAP or manuscript.
 
-10. There is no project-level execution harness.
-    - Scripts rely on working directory state and implicit file names.
-    - There is no `Makefile`, `targets` pipeline, `renv.lock`, or central configuration file.
+8. The project-level execution harness is sequential rather than dependency-aware.
+    - `Study3/master_run.R` runs the scripts in a fixed documented order and
+      `Study3/study3_paths.R` centralises path handling.
+    - There is no `targets` pipeline or `renv.lock`.
 
-11. Package availability is not pinned.
+9. Package availability is not pinned.
     - The code includes commented install commands but no reproducible R environment definition.
 
-12. Several scripts print results interactively rather than writing all outputs.
+10. Several scripts print results interactively rather than writing all outputs.
     - Main model summaries, QC tables, and secondary results are often only printed to console.
 
 ## Suggested Execution Order
 
-Assuming raw data and metadata paths are correctly arranged, a likely execution order is:
+The canonical execution order is defined in `Study3/master_run.R`:
 
 1. `01_eucert_initial_cleaning.R`
 2. `02_Helios_initial_cleaning.R`
@@ -942,44 +968,46 @@ Assuming raw data and metadata paths are correctly arranged, a likely execution 
 6. `06_Dataset_merging_updated.R`
 7. `07_Descriptive_Table1_Table2.R`
 8. `08_Cox models.R`
-9. Create or rename the final analysis cohort expected by later scripts, if appropriate:
+9. `09_Kaplan Maier and Fine Gray.R`
+10. `10_secondary analysis.R`
+11. `11_sensitivty analysis (180 days).R`
+12. `12_MICE.R`
 
-```r
-file.copy(
-  "study3_analysis_cohort_v2_final_followup.rds",
-  "study3_analysis_final.rds"
-)
+Run the canonical sequence in default/HPC mode:
+
+```bash
+Rscript Study3/master_run.R
 ```
 
-This copy should only be done if `study3_analysis_cohort_v2_final_followup.rds` is truly the intended final analysis dataset.
+Run the same sequence locally:
 
-10. `09_Kaplan Maier and Fine Gray.R`
-11. `10_secondary analysis.R`
-12. `11_sensitivty analysis (180 days).R`
-13. `12_MICE.R`
+```bash
+Rscript Study3/master_run.R --local
+```
 
 ## Suggested Refactoring Priorities
 
 The codebase would become more reproducible and easier to audit with these changes:
 
-1. Add a single project configuration file for paths, filenames, and dataset labels.
-2. Create a `metadata/` folder at the path expected by scripts or update all scripts to use the committed metadata location.
-3. Replace duplicate merge scripts with one canonical merge script.
-4. Remove the duplicated block in the Israel cleaning script.
-5. Standardise `status` and `Status`.
-6. Standardise final analysis dataset naming.
-7. Write model and QC outputs to CSV or RDS files, not only console output.
-8. Add `renv` or another R dependency lockfile.
-9. Add explicit assertions after each major step:
+1. Replace duplicate merge scripts with one canonical merge script.
+2. Remove the duplicated block in the Israel cleaning script.
+3. Standardise `status` and `Status`.
+4. Write model and QC outputs to CSV or RDS files, not only console output.
+5. Add `renv` or another R dependency lockfile.
+6. Add explicit assertions after each major step:
    - expected columns exist
    - no unresolved device groups
    - no invalid follow-up
    - expected datasets represented
    - expected ID-prefix merge success
-10. Consider converting the sequential scripts into a `targets` or `drake` pipeline so dependencies and outputs are explicit.
+7. Consider converting the sequential scripts into a `targets` pipeline so dependencies and outputs are explicit.
 
 ## Summary
 
 `Study3/` contains a complete scripted analysis concept for harmonising multi-registry ICD event data and analysing inappropriate shocks by single- versus dual-chamber ICD device group. The main design is clear: source-specific cleaning, common event schema, baseline merge, descriptive tables, incidence rates, Cox models, competing-risk analysis, 180-day sensitivity analysis, and MICE sensitivity analysis.
 
-The largest practical risks are not the statistical modelling code itself, but reproducibility and naming/path consistency: missing raw inputs, mismatched metadata paths, duplicated scripts, a downstream analysis filename that is not visibly produced, and inconsistent `status`/`Status` and Israel follow-up variable handling.
+The largest practical risks are not the statistical modelling code itself, but
+reproducibility and naming consistency: unavailable external raw inputs,
+duplicated scripts, inconsistent `status`/`Status`, and Israel follow-up
+variable handling. The master runner and shared path helpers reduce path and
+execution-order ambiguity in both default/HPC and local modes.
