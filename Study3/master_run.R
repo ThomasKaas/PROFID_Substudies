@@ -221,6 +221,7 @@ if (local) {
 }
 
 Sys.setenv(STUDY3_DEBUGGING = if (debugging) "1" else "0")
+Sys.setenv(STUDY3_MICE_PRINT_FLAG = "0")
 
 run_timestamp <- Sys.getenv("STUDY3_RUN_TIMESTAMP", unset = "")
 if (!nzchar(run_timestamp)) {

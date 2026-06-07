@@ -90,13 +90,15 @@ diag(pred) <- 0
 
 ##########Run MICE (m = 20)############
 set.seed(20260113)
+mice_print_flag <- tolower(trimws(Sys.getenv("STUDY3_MICE_PRINT_FLAG", unset = "1"))) %in%
+  c("1", "true", "yes", "on")
 imp <- mice(
   imp_df,
   m = 20,
   method = meth,
   predictorMatrix = pred,
   maxit = 20,
-  printFlag = TRUE
+  printFlag = mice_print_flag
 )
 
 # Qc
