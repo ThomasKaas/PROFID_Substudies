@@ -111,6 +111,32 @@ dt_israel_small <- extract_events(dt_israel)[, dataset := "ISRAEL"]
 dt_prose_small  <- extract_events(dt_prose)[,  dataset := "PROSE"]
 dt_lcv_small    <- extract_events(dt_lcv)[,    dataset := "LCV"]
 
+if (study3_debugging_enabled()) {
+  study3_debug_section("Pre-merge event datasets: survival-field availability")
+  premerge_debug <- rbindlist(list(
+    dt_eucert_small, dt_helios_small, dt_israel_small, dt_prose_small, dt_lcv_small
+  ), use.names = TRUE, fill = TRUE)
+  print(premerge_debug[, .(
+    n = .N,
+    patient_id_nonmissing = sum(!is.na(patient_id)),
+    implant_date_nonmissing = sum(!is.na(icd_implant_date)),
+    followup_nonmissing = sum(!is.na(t_followup_days)),
+    followup_positive = sum(!is.na(t_followup_days) & t_followup_days > 0),
+    israel_followup_nonmissing = sum(!is.na(t_followup_days_israel)),
+    inapp_shock_events = sum(tolower(as.character(inapp_shock_flag)) == "yes", na.rm = TRUE),
+    deaths = sum(tolower(as.character(death_flag)) == "yes", na.rm = TRUE)
+  ), by = dataset][order(dataset)])
+  study3_debug_columns(
+    dt_israel_small,
+    c(
+      "patient_id", "icd_implant_date", "last_fu_date", "death_date",
+      "last_fu_days", "days_to_death", "t_followup_days",
+      "t_followup_days_israel", "days_to_inapp_shock"
+    ),
+    "Israel immediately before merge"
+  )
+}
+
 
 ###################### 6. STACK EVENT DATASETS ######################
 
@@ -157,6 +183,28 @@ dt_final <- merge(
   by.y = "patient_id_full",
   all.x = TRUE
 )
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("Post-merge match and survival-field availability")
+  print(dt_final[, .(
+    n = .N,
+    event_record_matched = sum(!is.na(dataset)),
+    device_type_nonmissing = sum(!is.na(icd_type)),
+    followup_nonmissing = sum(!is.na(t_followup_days)),
+    followup_positive = sum(!is.na(t_followup_days) & t_followup_days > 0),
+    israel_followup_nonmissing = sum(!is.na(t_followup_days_israel)),
+    inapp_shock_events = sum(tolower(as.character(inapp_shock_flag)) == "yes", na.rm = TRUE)
+  ), by = dataset][order(dataset)])
+  study3_debug_columns(
+    dt_final[dataset == "ISRAEL"],
+    c(
+      "icd_implant_date", "last_fu_date", "death_date", "last_fu_days",
+      "days_to_death", "t_followup_days", "t_followup_days_israel",
+      "days_to_inapp_shock"
+    ),
+    "Israel immediately after baseline/event merge"
+  )
+}
 
 cat("Final merged Study 3 dataset:", nrow(dt_final), "rows\n")
 table(dt_final$dataset, useNA = "ifany")

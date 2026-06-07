@@ -19,6 +19,20 @@ library (mice)
 dt_final <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 study3_add_inapp_shock_event(dt_final)
 
+if (study3_debugging_enabled()) {
+  study3_debug_section("KM/Fine-Gray survival-readiness before filtering")
+  print(dt_final[, .(
+    n = .N,
+    missing_device_group = sum(is.na(device_group)),
+    missing_followup = sum(is.na(t_followup_days_final)),
+    nonpositive_followup = sum(!is.na(t_followup_days_final) & t_followup_days_final <= 0),
+    inappropriate_shocks = sum(event_inapp_shock == 1L, na.rm = TRUE),
+    shocks_missing_followup = sum(event_inapp_shock == 1L & is.na(t_followup_days_final), na.rm = TRUE),
+    deaths_case_insensitive = sum(tolower(as.character(death_flag)) == "yes", na.rm = TRUE),
+    deaths_exact_Yes = sum(as.character(death_flag) == "Yes", na.rm = TRUE)
+  ), by = dataset][order(dataset)])
+}
+
 valid_survival_input <- !is.na(dt_final$t_followup_days_final) &
   is.finite(dt_final$t_followup_days_final) &
   dt_final$t_followup_days_final > 0 &
@@ -531,6 +545,22 @@ study3_extract_crr_device_result <- function(fit, term, model, dataset_handling,
 }
 
 X_dataset <- model.matrix(~ device_group + dataset, data = dt_final)[, -1, drop = FALSE]
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("Dataset-adjusted Fine-Gray design")
+  cat("Datasets entering Fine-Gray: ",
+      paste(sort(unique(as.character(dt_final$dataset))), collapse = "; "),
+      "\n", sep = "")
+  cat("Design-matrix columns: ", paste(colnames(X_dataset), collapse = "; "), "\n", sep = "")
+  cat("Dataset reference level implied by model.matrix: ",
+      levels(factor(dt_final$dataset))[[1]], "\n", sep = "")
+  print(dt_final[, .(
+    n = .N,
+    event_0_censored = sum(fg_event == 0L),
+    event_1_inappropriate_shock = sum(fg_event == 1L),
+    event_2_competing_death = sum(fg_event == 2L)
+  ), by = dataset][order(dataset)])
+}
 
 fg_fit_dataset <- crr(
   ftime    = dt_final$t_followup_days_final,

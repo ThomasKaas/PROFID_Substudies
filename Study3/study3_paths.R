@@ -257,6 +257,59 @@ study3_file_ready <- function(file) {
   is.finite(size) && !is.na(size) && size > 0
 }
 
+study3_debugging_enabled <- function() {
+  tolower(trimws(Sys.getenv("STUDY3_DEBUGGING", unset = "0"))) %in%
+    c("1", "true", "yes", "on")
+}
+
+study3_debug_section <- function(title) {
+  if (!study3_debugging_enabled()) return(invisible(FALSE))
+  cat("\n", strrep("-", 78), "\n", sep = "")
+  cat("DEBUG: ", title, "\n", sep = "")
+  cat(strrep("-", 78), "\n", sep = "")
+  invisible(TRUE)
+}
+
+study3_debug_print <- function(x, title = NULL) {
+  if (!study3_debugging_enabled()) return(invisible(FALSE))
+  if (!is.null(title)) study3_debug_section(title)
+  print(x)
+  invisible(TRUE)
+}
+
+study3_debug_columns <- function(dt, columns, title) {
+  if (!study3_debugging_enabled()) return(invisible(FALSE))
+  columns <- intersect(columns, names(dt))
+  study3_debug_section(title)
+  if (!length(columns)) {
+    cat("None of the requested columns are present.\n")
+    return(invisible(TRUE))
+  }
+
+  result <- data.table::rbindlist(lapply(columns, function(column) {
+    x <- dt[[column]]
+    nonmissing <- !is.na(x)
+    nonblank <- nonmissing
+    if (is.character(x) || is.factor(x)) {
+      nonblank <- nonmissing & trimws(as.character(x)) != ""
+    }
+    numeric_x <- suppressWarnings(as.numeric(x))
+    data.table::data.table(
+      column = column,
+      class = paste(class(x), collapse = "/"),
+      n = length(x),
+      missing = sum(is.na(x)),
+      nonblank = sum(nonblank),
+      numeric_positive = sum(!is.na(numeric_x) & numeric_x > 0),
+      numeric_min = if (any(!is.na(numeric_x))) min(numeric_x, na.rm = TRUE) else NA_real_,
+      numeric_median = if (any(!is.na(numeric_x))) stats::median(numeric_x, na.rm = TRUE) else NA_real_,
+      numeric_max = if (any(!is.na(numeric_x))) max(numeric_x, na.rm = TRUE) else NA_real_
+    )
+  }), use.names = TRUE, fill = TRUE)
+  print(result)
+  invisible(TRUE)
+}
+
 study3_add_inapp_shock_event <- function(dt) {
   if (!requireNamespace("data.table", quietly = TRUE)) {
     stop("Package 'data.table' is required to derive event_inapp_shock.", call. = FALSE)

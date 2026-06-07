@@ -28,9 +28,24 @@ dt <- readRDS(study3_derived_path("study3_final_merged.rds"))
 ####### COHORT 1: BASELINE DESCRIPTIVES (ALL ELIGIBLE DATASETS)
 
 dt_desc <- dt[
-  dataset %in% c("EUCERT", "HELIOS", "PROSE", "ISRAEL")  
+  dataset %in% c("EUCERT", "HELIOS", "PROSE", "ISRAEL")
 ]
 names(dt_desc)
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("Analysis-cohort source fields before device/follow-up assignment")
+  print(dt_desc[, .(
+    n = .N,
+    device_type_nonmissing = sum(!is.na(icd_type)),
+    followup_nonmissing = sum(!is.na(t_followup_days)),
+    followup_positive = sum(!is.na(t_followup_days) & t_followup_days > 0),
+    israel_followup_nonmissing = sum(!is.na(t_followup_days_israel)),
+    israel_followup_positive = sum(
+      !is.na(suppressWarnings(as.numeric(t_followup_days_israel))) &
+        suppressWarnings(as.numeric(t_followup_days_israel)) > 0
+    )
+  ), by = dataset][order(dataset)])
+}
 
 ####### DEFINE DEVICE GROUP (SINGLE VS DUAL) #######
 
@@ -131,7 +146,21 @@ if ("t_followup_days_israel" %in% names(dt_desc)) {
 dt_desc[dataset != "ISRAEL",
         t_followup_days_final := t_followup_days]
 
-dt_analysis <- dt_desc   
+dt_analysis <- dt_desc
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("First t_followup_days_final assignment comparison")
+  print(dt_analysis[, .(
+    n = .N,
+    source_followup_nonmissing = sum(!is.na(t_followup_days)),
+    israel_source_nonmissing = sum(!is.na(t_followup_days_israel)),
+    final_followup_nonmissing = sum(!is.na(t_followup_days_final)),
+    final_followup_positive = sum(!is.na(t_followup_days_final) & t_followup_days_final > 0),
+    lost_from_standard_source = sum(
+      !is.na(t_followup_days) & is.na(t_followup_days_final)
+    )
+  ), by = dataset][order(dataset)])
+}
 
 
 #######  NORMALITY (PER DEVICE GROUP) #######
@@ -292,6 +321,28 @@ dt_desc[dataset != "ISRAEL",
         t_followup_days_final := t_followup_days]
 
 dt_analysis <- dt_desc
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("Final analysis cohort survival readiness")
+  study3_add_inapp_shock_event(dt_analysis)
+  print(dt_analysis[, .(
+    n = .N,
+    device_group_nonmissing = sum(!is.na(device_group)),
+    final_followup_nonmissing = sum(!is.na(t_followup_days_final)),
+    final_followup_positive = sum(!is.na(t_followup_days_final) & t_followup_days_final > 0),
+    final_followup_nonpositive = sum(!is.na(t_followup_days_final) & t_followup_days_final <= 0),
+    inappropriate_shocks = sum(event_inapp_shock == 1L, na.rm = TRUE),
+    shocks_missing_followup = sum(event_inapp_shock == 1L & is.na(t_followup_days_final), na.rm = TRUE)
+  ), by = dataset][order(dataset)])
+  study3_debug_columns(
+    dt_analysis[dataset == "ISRAEL"],
+    c(
+      "t_followup_days", "t_followup_days_israel", "t_followup_days_final",
+      "days_to_inapp_shock", "days_to_death"
+    ),
+    "Israel analysis-cohort time fields"
+  )
+}
 
 
 table(dt_analysis$Inapp_ATP)

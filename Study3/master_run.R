@@ -8,6 +8,7 @@
 #   Rscript Study3/master_run.R --stage analysis
 #   Rscript Study3/master_run.R --from merge --to descriptive
 #   Rscript Study3/master_run.R --dry-run
+#   Rscript Study3/master_run.R --debugging
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -18,6 +19,7 @@ usage <- function(status = 0L) {
     "Options:\n",
     "  --help                    Show this help text.\n",
     "  --dry-run                 Print the selected scripts without running them.\n",
+    "  --debugging               Print detailed cohort, field, and model-input diagnostics.\n",
     "  --stage <name>            Run one stage: all, preprocessing, analysis,\n",
     "                            descriptive, modeling, sensitivity, imputation.\n",
     "                            Default: all.\n",
@@ -115,6 +117,7 @@ from_id <- NULL
 to_id <- NULL
 only_ids <- NULL
 dry_run <- FALSE
+debugging <- FALSE
 continue_on_error <- FALSE
 
 i <- 1L
@@ -125,6 +128,8 @@ while (i <= length(args)) {
     usage(0L)
   } else if (arg == "--dry-run") {
     dry_run <- TRUE
+  } else if (arg == "--debugging") {
+    debugging <- TRUE
   } else if (arg == "--continue-on-error") {
     continue_on_error <- TRUE
   } else if (arg == "--stage") {
@@ -196,6 +201,8 @@ repo_root <- repo_root_from_script()
 old_wd <- getwd()
 setwd(repo_root)
 on.exit(setwd(old_wd), add = TRUE)
+
+Sys.setenv(STUDY3_DEBUGGING = if (debugging) "1" else "0")
 
 run_timestamp <- Sys.getenv("STUDY3_RUN_TIMESTAMP", unset = "")
 if (!nzchar(run_timestamp)) {
@@ -301,6 +308,7 @@ if (length(missing_scripts)) {
 cat("Study3 master run\n")
 cat(sprintf("Repository root: %s\n", repo_root))
 cat(sprintf("R library path: %s\n", r_libs_user))
+cat(sprintf("Debugging output: %s\n", if (debugging) "enabled" else "disabled"))
 cat(sprintf("Selected scripts: %d\n\n", nrow(selected)))
 
 for (j in seq_len(nrow(selected))) {

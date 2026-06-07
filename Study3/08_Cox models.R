@@ -51,6 +51,31 @@ dt[, .N, by = .(dataset, event_inapp_shock)]
 
 dt <- dt[t_followup_days_final > 0]
 
+if (study3_debugging_enabled()) {
+  study3_debug_section("Primary Cox survival-readiness exclusions")
+  raw_cox <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
+  study3_add_inapp_shock_event(raw_cox)
+  print(raw_cox[, .(
+    n = .N,
+    missing_device_group = sum(is.na(device_group)),
+    missing_followup = sum(is.na(t_followup_days_final)),
+    nonpositive_followup = sum(!is.na(t_followup_days_final) & t_followup_days_final <= 0),
+    eligible_positive_followup = sum(
+      !is.na(device_group) &
+        !is.na(t_followup_days_final) &
+        t_followup_days_final > 0
+    ),
+    events_total = sum(event_inapp_shock == 1L, na.rm = TRUE),
+    events_eligible = sum(
+      event_inapp_shock == 1L &
+        !is.na(device_group) &
+        !is.na(t_followup_days_final) &
+        t_followup_days_final > 0,
+      na.rm = TRUE
+    )
+  ), by = dataset][order(dataset)])
+}
+
 
 ########## PRIMARY ANALYSIS COHORT (WITH ISRAEL) ##########
 
@@ -68,6 +93,20 @@ dt_primary[, .(
   n = .N,
   events = sum(event_inapp_shock)
 ), by = .(dataset, device_group)][order(dataset, device_group)]
+
+if (study3_debugging_enabled()) {
+  study3_debug_section("Primary Cox final model input")
+  print(dt_primary[, .(
+    n = .N,
+    events = sum(event_inapp_shock == 1L, na.rm = TRUE),
+    min_followup = min(t_followup_days_final, na.rm = TRUE),
+    median_followup = median(t_followup_days_final, na.rm = TRUE),
+    max_followup = max(t_followup_days_final, na.rm = TRUE)
+  ), by = dataset][order(dataset)])
+  cat("Cox strata entering model: ",
+      paste(sort(unique(as.character(dt_primary$dataset))), collapse = "; "),
+      "\n", sep = "")
+}
 
 ########## PRIMARY COX MODEL ##########
 # Stratified by dataset

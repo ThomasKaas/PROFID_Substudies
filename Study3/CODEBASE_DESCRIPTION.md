@@ -61,7 +61,78 @@ The main downstream analysis cohort created by the descriptive script is:
 
 - `study3_analysis_cohort_v2_final_followup.rds`
 
-Several later scripts read `study3_analysis_final.rds`, which is not produced by any script in the visible codebase. This is a reproducibility gap unless that file is created manually outside the repository or is intended to be an alias of `study3_analysis_cohort_v2_final_followup.rds`.
+The descriptive script also writes the same analysis cohort as
+`study3_analysis_final.rds`, which is the filename loaded by later modelling
+scripts.
+
+## Master Runner And Debugging Mode
+
+`Study3/master_run.R` runs the numbered Study 3 scripts in order and writes a
+timestamped master log to:
+
+```text
+Study3/outputs/master_run_<timestamp>.txt
+```
+
+The runner supports the normal stage-selection options and an additional
+diagnostic mode:
+
+```bash
+Rscript Study3/master_run.R --debugging
+```
+
+The Slurm wrapper forwards the same option:
+
+```bash
+./Study3/run_study3.sh --debugging
+```
+
+`--debugging` sets the shared `STUDY3_DEBUGGING=1` environment flag. Scripts
+that source `Study3/study3_paths.R` use the following shared helpers:
+
+- `study3_debugging_enabled()` checks whether debug reporting is active.
+- `study3_debug_section()` prints consistently labelled debug headings.
+- `study3_debug_print()` prints an object only during a debug run.
+- `study3_debug_columns()` summarizes requested columns, including class,
+  missingness, nonblank values, positive numeric values, and numeric range.
+
+All added debug reports use `cat()` or `print()`. Because the master runner uses
+`sink(log_con, split = TRUE)`, these reports are written to both the terminal
+and the master text log. Warnings and package messages written to standard error
+may instead appear only in the Slurm log.
+
+The detailed reports trace the complete Israel-to-model path:
+
+1. `03_israel_initial_cleaning.R`
+   - raw input location and dimensions
+   - harmonised date-field availability
+   - representative raw date strings
+   - parsed and derived follow-up fields
+   - final cleaned Israel follow-up, event, and death counts
+   - separate labels for the script's first duplicated block and the
+     export-producing block
+2. `06_Dataset_merging_updated.R`
+   - survival-field availability for every source dataset before merging
+   - detailed Israel field availability immediately before merging
+   - match and field-retention summaries immediately after merging
+3. `07_Descriptive_Table1_Table2.R`
+   - source follow-up fields before final-follow-up assignment
+   - comparison of `t_followup_days`, `t_followup_days_israel`, and
+     `t_followup_days_final`
+   - final survival readiness and events lost because follow-up is unavailable
+4. `08_Cox models.R`
+   - missing/non-positive follow-up and device-group exclusions by dataset
+   - events before and after eligibility filtering
+   - final Cox input, follow-up range, and dataset strata
+5. `09_Kaplan Maier and Fine Gray.R`
+   - missing/non-positive follow-up and event losses before filtering
+   - case-sensitive versus case-insensitive death counts
+   - datasets entering Fine-Gray
+   - Fine-Gray event coding by dataset
+   - dataset reference level and dataset-adjusted design-matrix columns
+
+Debug mode is reporting-only. It does not alter values, filtering rules,
+cohort definitions, endpoints, models, or statistical methods.
 
 ## R Package Dependencies
 

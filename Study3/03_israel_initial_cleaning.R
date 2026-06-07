@@ -18,6 +18,12 @@ path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 dt_israel <- fread(path_israel)
 
+if (study3_debugging_enabled()) {
+  study3_debug_section("Israel raw input (first duplicated preprocessing block)")
+  cat("Source path: ", path_israel, "\n", sep = "")
+  cat("Rows: ", nrow(dt_israel), "; columns: ", ncol(dt_israel), "\n", sep = "")
+}
+
 ###################### 2. RENAME USING SMALL MAP ######################
 
 map_small <- as.data.table(read_excel(path_smallmap, sheet = 1))
@@ -33,6 +39,20 @@ for (i in seq_len(nrow(rename_map))) {
   old <- rename_map$original[i]
   new <- rename_map$new[i]
   if (old %in% names(dt_israel)) setnames(dt_israel, old, new)
+}
+
+if (study3_debugging_enabled()) {
+  study3_debug_columns(
+    dt_israel,
+    c("patient_id", "icd_type", "icd_implant_date", "death_date", "last_fu_date"),
+    "Israel harmonised fields before date parsing (first duplicated block)"
+  )
+  study3_debug_section("Israel representative date strings before parsing (first duplicated block)")
+  for (v in intersect(c("icd_implant_date", "death_date", "last_fu_date"), names(dt_israel))) {
+    values <- unique(trimws(as.character(dt_israel[[v]])))
+    values <- values[!is.na(values) & values != ""]
+    cat(v, ": ", paste(utils::head(values, 15L), collapse = " | "), "\n", sep = "")
+  }
 }
 
 ###################### 3. ADD DEATH FLAG ######################
@@ -209,6 +229,12 @@ path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 dt_israel <- fread(path_israel)
 
+if (study3_debugging_enabled()) {
+  study3_debug_section("Israel raw input (export-producing preprocessing block)")
+  cat("Source path: ", path_israel, "\n", sep = "")
+  cat("Rows: ", nrow(dt_israel), "; columns: ", ncol(dt_israel), "\n", sep = "")
+}
+
 ###################### 2. RENAME USING SMALL MAP ######################
 
 map_small <- as.data.table(read_excel(path_smallmap, sheet = 1))
@@ -224,6 +250,20 @@ for (i in seq_len(nrow(rename_map))) {
   old <- rename_map$original[i]
   new <- rename_map$new[i]
   if (old %in% names(dt_israel)) setnames(dt_israel, old, new)
+}
+
+if (study3_debugging_enabled()) {
+  study3_debug_columns(
+    dt_israel,
+    c("patient_id", "icd_type", "icd_implant_date", "death_date", "last_fu_date"),
+    "Israel harmonised fields before date parsing (export-producing block)"
+  )
+  study3_debug_section("Israel representative date strings before parsing (export-producing block)")
+  for (v in intersect(c("icd_implant_date", "death_date", "last_fu_date"), names(dt_israel))) {
+    values <- unique(trimws(as.character(dt_israel[[v]])))
+    values <- values[!is.na(values) & values != ""]
+    cat(v, ": ", paste(utils::head(values, 15L), collapse = " | "), "\n", sep = "")
+  }
 }
 
 ###################### 3. ADD DEATH FLAG ######################
@@ -384,6 +424,33 @@ if ("age_icd" %in% names(dt)) {
 ###################### 11. EXPORT ######################
 
 dt_israel_final <- copy(dt)
+if (study3_debugging_enabled()) {
+  study3_debug_columns(
+    dt_israel,
+    c(
+      "icd_implant_date", "death_date", "last_fu_date", "last_fu_days",
+      "days_to_death", "t_followup_days", "days_to_inapp_shock"
+    ),
+    "Israel fields after date parsing and follow-up derivation"
+  )
+  study3_debug_section("Israel final cleaned export summary")
+  print(dt_israel_final[, .(
+    n = .N,
+    implant_date_nonmissing = sum(!is.na(icd_implant_date)),
+    last_fu_date_nonmissing = sum(!is.na(last_fu_date)),
+    death_date_nonmissing = sum(!is.na(death_date)),
+    followup_nonmissing = sum(!is.na(t_followup_days)),
+    followup_positive = sum(!is.na(t_followup_days) & t_followup_days > 0),
+    followup_nonpositive = sum(!is.na(t_followup_days) & t_followup_days <= 0),
+    inapp_shock_events = sum(tolower(as.character(inapp_shock_flag)) == "yes", na.rm = TRUE),
+    deaths = sum(tolower(as.character(death_flag)) == "yes", na.rm = TRUE)
+  )])
+  print(dt_israel_final[, .(
+    n = .N,
+    followup_nonmissing = sum(!is.na(t_followup_days)),
+    followup_positive = sum(!is.na(t_followup_days) & t_followup_days > 0)
+  ), by = death_flag][order(death_flag)])
+}
 dir.create(study3_derived_root(), recursive = TRUE, showWarnings = FALSE)
 saveRDS(dt_israel_final, study3_derived_path("israel_events_clean.rds"))
 

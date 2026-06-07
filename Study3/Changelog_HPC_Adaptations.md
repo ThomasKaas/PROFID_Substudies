@@ -216,3 +216,52 @@ Slurm wrapper:
 ```bash
 ./Study3/run_study3.sh
 ```
+
+## Detailed Master-Run Debugging Output
+
+`Study3/master_run.R` now accepts:
+
+```bash
+Rscript Study3/master_run.R --debugging
+```
+
+The Slurm wrapper forwards the option:
+
+```bash
+./Study3/run_study3.sh --debugging
+```
+
+The option can be combined with stage or step selection, for example:
+
+```bash
+Rscript Study3/master_run.R --from preprocess_israel --to km_fine_gray --debugging
+```
+
+The runner sets `STUDY3_DEBUGGING=1`, and shared reporting helpers in
+`Study3/study3_paths.R` allow the critical scripts to print detailed
+diagnostics only during debug runs. Normal runs remain concise.
+
+The added reports trace:
+
+- Israel raw and harmonised date fields
+- representative Israel date strings before parsing
+- Israel parsed dates, derived follow-up, events, and deaths
+- source-dataset fields before merging and Israel fields after merging
+- transfer from `t_followup_days`/`t_followup_days_israel` into
+  `t_followup_days_final`
+- dataset-specific Cox exclusions and final Cox input
+- dataset-specific Fine-Gray exclusions, event coding, included datasets,
+  reference level, and design-matrix columns
+
+All added diagnostic output uses `cat()` or `print()` and is therefore copied
+to both the terminal and the timestamped master text log through the runner's
+`sink(log_con, split = TRUE)` configuration:
+
+```text
+Study3/outputs/master_run_<timestamp>.txt
+```
+
+Warnings and package messages written to standard error may appear only in the
+Slurm log. Debug mode changes reporting only; it does not change any input
+value, endpoint, cohort rule, filtering rule, model formula, or statistical
+method.
