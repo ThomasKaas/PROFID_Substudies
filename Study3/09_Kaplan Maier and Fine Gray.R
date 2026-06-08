@@ -155,6 +155,50 @@ study3_km_curve_data <- function(fit, labels, x_limit = 3000) {
   curve_dt[time_days <= x_limit][order(device_group, time_days)]
 }
 
+study3_km_ci_intervals <- function(curve_data, x_limit) {
+  if (!nrow(curve_data)) {
+    return(data.table(
+      x_left = numeric(),
+      x_right = numeric(),
+      lower_95 = numeric(),
+      upper_95 = numeric()
+    ))
+  }
+
+  interval_dt <- copy(curve_data)[order(time_days)]
+  interval_dt[, x_right := c(time_days[-1], x_limit)]
+  interval_dt[
+    !is.na(lower_95) &
+      !is.na(upper_95) &
+      x_right > time_days &
+      time_days < x_limit,
+    .(
+      x_left = time_days,
+      x_right = pmin(x_right, x_limit),
+      lower_95 = pmax(0, lower_95),
+      upper_95 = pmin(1, upper_95)
+    )
+  ][x_right > x_left]
+}
+
+study3_draw_km_ci <- function(curve_data, x_limit, col,
+                              transform_x = identity,
+                              transform_y = identity) {
+  ci_dt <- study3_km_ci_intervals(curve_data, x_limit)
+  if (!nrow(ci_dt)) return(invisible(NULL))
+
+  rect(
+    xleft = transform_x(ci_dt$x_left),
+    ybottom = transform_y(ci_dt$lower_95),
+    xright = transform_x(ci_dt$x_right),
+    ytop = transform_y(ci_dt$upper_95),
+    col = col,
+    border = NA
+  )
+
+  invisible(NULL)
+}
+
 study3_figure1_label <- function(labels) {
   display_labels <- labels
   display_labels[grepl("single", labels, ignore.case = TRUE)] <- "Single Lead Device"
@@ -212,28 +256,41 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
                                            logrank_p = NA_real_) {
   x_axis <- study3_figure1_year_axis(x_limit)
   x_breaks <- x_axis$days
+  panel_xlim <- c(0, x_limit)
   risk_table <- study3_km_risk_table(fit, x_breaks, labels)
+  curve_dt <- study3_km_curve_data(fit, labels, x_limit)
   display_labels <- study3_figure1_label(labels)
   n_groups <- length(labels)
   is_dual <- grepl("dual|double", labels, ignore.case = TRUE)
   curve_col <- ifelse(is_dual, "#C00000", "#003F9E")
+  ci_fill_col <- ifelse(
+    is_dual,
+    grDevices::adjustcolor("#C00000", alpha.f = 0.14),
+    grDevices::adjustcolor("#003F9E", alpha.f = 0.14)
+  )
   curve_lty <- ifelse(is_dual, 2, 1)
   legend_order <- c(which(!is_dual), which(is_dual))
   if (!length(legend_order)) legend_order <- seq_along(labels)
   left_margin <- 11.0
   risk_label_x <- -0.045 * x_limit
-  main_axis_cex <- 1.08
-  main_label_cex <- 1.08
-  legend_cex <- 0.96
-  risk_axis_cex <- 1.02
-  risk_label_cex <- 0.93
-  risk_group_cex <- 0.86
-  risk_number_cex <- 1.03
+  text_cex <- 1.14
+  main_axis_cex <- text_cex
+  main_label_cex <- text_cex
+  legend_cex <- text_cex
+  risk_axis_cex <- text_cex
+  risk_label_cex <- text_cex
+  risk_group_cex <- text_cex
+  risk_number_cex <- text_cex
   censor_tick_half_height <- 0.004
   censor_tick_lwd <- 0.45
-  inset_x <- c(0.45, 0.97) * x_limit
-  inset_y <- c(0.27, 0.78)
+  inset_censor_tick_half_height <- 0.0018
+  inset_censor_tick_lwd <- 0.3
+  inset_x <- c(0.31, 0.998) * x_limit
+  inset_y <- c(0.18, 0.86)
   inset_ylim <- c(0.9, 1.0)
+  inset_axis_x_tick_length <- 0.01
+  inset_axis_y_tick_length <- 0.012 * x_limit
+  inset_axis_tick_lwd <- 0.6
   logrank_label <- paste0("Log-rank p = ", study3_format_p(logrank_p))
 
   old_par <- par(no.readonly = TRUE)
@@ -243,21 +300,38 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
 
   par(mar = c(0.5, left_margin, 4.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
   plot(
-    fit,
-    col = curve_col,
-    lty = curve_lty,
-    lwd = 1.35,
+    NA,
     xlab = "",
-	    ylab = "Event-free survival (inappropriate shock)",
-	    xlim = c(0, x_limit),
-	    ylim = c(0, 1.0),
-	    xaxt = "n",
-	    yaxt = "n",
-	    mark.time = FALSE,
-    conf.int = FALSE,
+    ylab = "Event-free survival (inappropriate shock)",
+    xlim = panel_xlim,
+    ylim = c(0, 1.0),
+    xaxt = "n",
+    yaxt = "n",
+    type = "n",
     cex.axis = main_axis_cex,
     cex.lab = main_label_cex
   )
+  for (i in seq_along(labels)) {
+    group_curve <- curve_dt[device_group == labels[[i]]][order(time_days)]
+    study3_draw_km_ci(
+      curve_data = group_curve,
+      x_limit = x_limit,
+      col = ci_fill_col[[i]]
+    )
+  }
+  for (i in seq_along(labels)) {
+    group_curve <- curve_dt[device_group == labels[[i]]][order(time_days)]
+    if (nrow(group_curve)) {
+      lines(
+        group_curve$time_days,
+        group_curve$survival,
+        type = "s",
+        col = curve_col[[i]],
+        lty = curve_lty[[i]],
+        lwd = 1.35
+      )
+    }
+  }
   censor_summary <- summary(fit, censored = TRUE)
 	  if (length(censor_summary$time)) {
     censor_strata <- sub("^device_group=", "", as.character(censor_summary$strata))
@@ -292,36 +366,18 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
 	  title(
     main = "Figure 1. Kaplan-Meier Estimates of Time to First Inappropriate ICD Shock by Device Type",
     line = 2.5,
-    cex.main = 1.05,
+    cex.main = text_cex,
     font.main = 2
   )
 	  mtext(
 	    sprintf("Follow-up truncated at %s days (%.1f years)", format(x_limit, big.mark = ","), x_limit / 365.25),
 	    side = 3,
 	    line = 1.0,
-    cex = 0.95,
+    cex = text_cex,
     font = 3,
     col = "#1E3557"
   )
-	  legend(
-	    x = 70,
-	    y = 0.24,
-	    legend = display_labels[legend_order],
-	    col = curve_col[legend_order],
-	    lty = curve_lty[legend_order],
-    lwd = 2,
-    bty = "n",
-    cex = legend_cex
-  )
-	  text(
-	    x = 70,
-	    y = 0.035,
-	    labels = paste(logrank_label, "(Descriptive comparison only)", sep = "\n"),
-	    adj = c(0, 0),
-	    cex = 0.83
-	  )
 
-  curve_dt <- study3_km_curve_data(fit, labels, x_limit)
   to_inset_x <- function(x) inset_x[[1]] + (x / x_limit) * diff(inset_x)
   to_inset_y <- function(y) {
     inset_y[[1]] + ((y - inset_ylim[[1]]) / diff(inset_ylim)) * diff(inset_y)
@@ -331,6 +387,13 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   clip(inset_x[[1]], inset_x[[2]], inset_y[[1]], inset_y[[2]])
   for (i in seq_along(labels)) {
     group_curve <- curve_dt[device_group == labels[[i]]][order(time_days)]
+    study3_draw_km_ci(
+      curve_data = group_curve,
+      x_limit = x_limit,
+      col = ci_fill_col[[i]],
+      transform_x = to_inset_x,
+      transform_y = to_inset_y
+    )
     if (nrow(group_curve)) {
       lines(
         to_inset_x(group_curve$time_days),
@@ -354,11 +417,11 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
       if (length(tick_idx)) {
         segments(
           x0 = to_inset_x(censor_summary$time[tick_idx]),
-          y0 = to_inset_y(censor_summary$surv[tick_idx] - censor_tick_half_height),
+          y0 = to_inset_y(censor_summary$surv[tick_idx] - inset_censor_tick_half_height),
           x1 = to_inset_x(censor_summary$time[tick_idx]),
-          y1 = to_inset_y(censor_summary$surv[tick_idx] + censor_tick_half_height),
+          y1 = to_inset_y(censor_summary$surv[tick_idx] + inset_censor_tick_half_height),
           col = curve_col[[i]],
-          lwd = censor_tick_lwd,
+          lwd = inset_censor_tick_lwd,
           lend = "butt"
         )
       }
@@ -366,25 +429,71 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   }
   clip(par("usr")[[1]], par("usr")[[2]], par("usr")[[3]], par("usr")[[4]])
   rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], border = "grey25", lwd = 0.8)
+  legend(
+    x = inset_x[[1]] + 0.03 * diff(inset_x),
+    y = inset_y[[1]] + 0.40 * diff(inset_y),
+    legend = display_labels[legend_order],
+    col = curve_col[legend_order],
+    lty = curve_lty[legend_order],
+    lwd = 2,
+    bg = grDevices::adjustcolor("white", alpha.f = 0.78),
+    box.col = NA,
+    y.intersp = 0.95,
+    x.intersp = 0.85,
+    cex = legend_cex,
+    xpd = NA
+  )
+  rect(
+    xleft = inset_x[[1]] + 0.02 * diff(inset_x),
+    ybottom = inset_y[[1]] + 0.06 * diff(inset_y),
+    xright = inset_x[[1]] + 0.34 * diff(inset_x),
+    ytop = inset_y[[1]] + 0.16 * diff(inset_y),
+    col = grDevices::adjustcolor("white", alpha.f = 0.78),
+    border = NA,
+    xpd = NA
+  )
+  text(
+    x = inset_x[[1]] + 0.065 * diff(inset_x),
+    y = inset_y[[1]] + 0.08 * diff(inset_y),
+    labels = logrank_label,
+    adj = c(0, 0),
+    cex = text_cex,
+    xpd = NA
+  )
   axis_x_ticks <- round(seq(0, floor(x_limit / 365.25), by = 2) * 365.25)
   axis_x_labels <- as.character(seq(0, floor(x_limit / 365.25), by = 2))
   axis_y_ticks <- seq(0.9, 1.0, by = 0.05)
-  segments(to_inset_x(axis_x_ticks), inset_y[[1]], to_inset_x(axis_x_ticks), inset_y[[1]] - 0.015)
-  text(to_inset_x(axis_x_ticks), inset_y[[1]] - 0.045, axis_x_labels, cex = 0.67, xpd = NA)
-  segments(inset_x[[1]], to_inset_y(axis_y_ticks), inset_x[[1]] - 0.018 * x_limit, to_inset_y(axis_y_ticks))
-  text(inset_x[[1]] - 0.028 * x_limit, to_inset_y(axis_y_ticks), sprintf("%.2f", axis_y_ticks), cex = 0.67, adj = 1, xpd = NA)
+  segments(
+    to_inset_x(axis_x_ticks), inset_y[[1]],
+    to_inset_x(axis_x_ticks), inset_y[[1]] - inset_axis_x_tick_length,
+    lwd = inset_axis_tick_lwd
+  )
+  text(to_inset_x(axis_x_ticks), inset_y[[1]] - 0.040, axis_x_labels, cex = text_cex, xpd = NA)
+  segments(
+    inset_x[[1]], to_inset_y(axis_y_ticks),
+    inset_x[[1]] - inset_axis_y_tick_length, to_inset_y(axis_y_ticks),
+    lwd = inset_axis_tick_lwd
+  )
+  text(
+    inset_x[[1]] - 0.021 * x_limit,
+    to_inset_y(axis_y_ticks),
+    sprintf("%.2f", axis_y_ticks),
+    cex = text_cex,
+    adj = 1,
+    xpd = NA
+  )
 
 	  par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
 	  plot(
     NA,
-    xlim = c(0, x_limit),
-    ylim = c(0, n_groups + 1.45),
+    xlim = panel_xlim,
+    ylim = c(0, n_groups + 1.65),
     axes = FALSE,
     xlab = "",
 	    ylab = ""
 	  )
 	  axis(1, at = x_breaks, labels = x_axis$labels, tck = -0.06, line = 0, cex.axis = risk_axis_cex)
-	  mtext("Years since ICD implantation", side = 1, line = 2.35, cex = 1.05)
+	  mtext("Years since ICD implantation", side = 1, line = 2.35, cex = text_cex)
 
   row_y <- rev(seq_len(n_groups)) * 0.78 + 0.35
   par(xpd = NA)

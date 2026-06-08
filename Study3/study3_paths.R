@@ -359,6 +359,11 @@ study3_save_plot <- function(plot, png_file, pdf_file, width, height, dpi = 300)
   dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)
 
   pdf_devices <- list()
+  if (identical(unname(Sys.info()[["sysname"]]), "Darwin") && capabilities("aqua")) {
+    pdf_devices[["grDevices::quartz(type = 'pdf')"]] <- function(filename, width, height) {
+      grDevices::quartz(file = filename, type = "pdf", width = width, height = height)
+    }
+  }
   if (capabilities("cairo")) {
     pdf_devices[["grDevices::cairo_pdf"]] <- grDevices::cairo_pdf
   }
@@ -487,6 +492,11 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
   dir.create(dirname(pdf_file), recursive = TRUE, showWarnings = FALSE)
 
   pdf_devices <- list()
+  if (identical(unname(Sys.info()[["sysname"]]), "Darwin") && capabilities("aqua")) {
+    pdf_devices[["grDevices::quartz(type = 'pdf')"]] <- function(filename, width, height) {
+      grDevices::quartz(file = filename, type = "pdf", width = width, height = height)
+    }
+  }
   if (capabilities("cairo")) {
     pdf_devices[["grDevices::cairo_pdf"]] <- grDevices::cairo_pdf
   }
@@ -535,6 +545,19 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
   }
 
   png_devices <- list()
+
+  if (identical(unname(Sys.info()[["sysname"]]), "Darwin") && capabilities("aqua")) {
+    png_devices[["grDevices::quartz(type = 'png')"]] <- function(filename) {
+      grDevices::quartz(
+        file = filename,
+        type = "png",
+        width = png_width / png_res,
+        height = png_height / png_res,
+        dpi = png_res,
+        bg = "white"
+      )
+    }
+  }
 
   if (requireNamespace("ragg", quietly = TRUE)) {
     png_devices[["ragg::agg_png"]] <- function(filename) {
