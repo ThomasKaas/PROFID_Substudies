@@ -491,9 +491,12 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
       {
         before_device <- grDevices::dev.cur()
         pdf_devices[[device_name]](pdf_file, width = pdf_width, height = pdf_height)
+        if (grDevices::dev.cur() == before_device) {
+          stop(sprintf("device did not open: %s", device_name), call. = FALSE)
+        }
         tryCatch(
           draw(),
-          finally = grDevices::dev.off()
+          finally = if (grDevices::dev.cur() > before_device) grDevices::dev.off()
         )
         if (!study3_file_ready(pdf_file)) {
           stop(sprintf("device completed but did not create a non-empty file: %s", pdf_file),
@@ -502,7 +505,7 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
         TRUE
       },
       error = function(e) {
-        if (exists("before_device") && grDevices::dev.cur() != before_device) {
+        if (exists("before_device") && grDevices::dev.cur() > before_device) {
           grDevices::dev.off()
         }
         pdf_errors <<- c(pdf_errors, sprintf("%s: %s", device_name, conditionMessage(e)))
@@ -570,10 +573,14 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
   for (device_name in names(png_devices)) {
     ok <- tryCatch(
       {
+        before_device <- grDevices::dev.cur()
         png_devices[[device_name]](png_file)
+        if (grDevices::dev.cur() == before_device) {
+          stop(sprintf("device did not open: %s", device_name), call. = FALSE)
+        }
         tryCatch(
           draw(),
-          finally = grDevices::dev.off()
+          finally = if (grDevices::dev.cur() > before_device) grDevices::dev.off()
         )
         if (!study3_file_ready(png_file)) {
           stop(sprintf("device completed but did not create a non-empty file: %s", png_file),
@@ -582,7 +589,7 @@ study3_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
         TRUE
       },
       error = function(e) {
-        if (grDevices::dev.cur() > 1) grDevices::dev.off()
+        if (exists("before_device") && grDevices::dev.cur() > before_device) grDevices::dev.off()
         png_errors <<- c(png_errors, sprintf("%s: %s", device_name, conditionMessage(e)))
         FALSE
       }
