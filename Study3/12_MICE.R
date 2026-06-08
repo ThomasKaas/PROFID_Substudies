@@ -40,12 +40,13 @@ dt[, Diabetes := factor(Diabetes, levels = c("No","Yes"))]
 
 # FOLLOW UP
 dt[, t_followup_days_final := as.numeric(t_followup_days_final)]
+dt[, t_inapp_shock_or_censor_days := as.numeric(t_inapp_shock_or_censor_days)]
 
 ############# SAP eligibility: keep only vars with <30% missingness for imputation #
 
 # Candidate predictors 
 cand <- c("device_group","age_icd","Sex","LVEF","Diabetes","dataset",
-          "t_followup_days_final","event_inapp_shock")
+          "t_inapp_shock_or_censor_days","event_inapp_shock")
 
 # Compute missingness 
 miss <- sapply(dt[, ..cand], function(x) mean(is.na(x)))
@@ -70,7 +71,7 @@ ini <- mice(imp_df, maxit = 0, printFlag = FALSE)
 meth <- ini$method
 pred <- ini$predictorMatrix
 
-no_impute <- c("t_followup_days_final","event_inapp_shock","device_group","dataset")
+no_impute <- c("t_inapp_shock_or_censor_days","event_inapp_shock","device_group","dataset")
 meth[no_impute] <- ""
 
 # Methods: pmm for numeric; factors left unimputed here
@@ -111,7 +112,7 @@ imp$method
 
 fit_imp <- with(
   imp,
-  coxph(Surv(t_followup_days_final, event_inapp_shock) ~
+  coxph(Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
           device_group + age_icd + Sex + LVEF  + strata(dataset))
 )
 

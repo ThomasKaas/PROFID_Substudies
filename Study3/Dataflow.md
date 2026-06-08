@@ -36,15 +36,14 @@ flowchart TD
 
     O6 --> S07["07_Descriptive_Table1_Table2.R"]
     S07 --> O7["study3_device_analysis_cohort.rds"]
-    S07 --> O8["study3_analysis_cohort_v2_final_followup.rds"]
-    S07 --> O9["study3_analysis_final.rds"]
-    S07 --> O10["Descriptive outputs:<br/>missingness, follow-up summary,<br/>incidence rates"]
+    S07 --> O8["study3_analysis_final.rds"]
+    S07 --> O9["Descriptive outputs:<br/>missingness, follow-up summary,<br/>incidence rates"]
 
     O8 --> S08["08_Cox models.R"]
-    O9 --> S09["09_Kaplan Maier and Fine Gray.R"]
-    O9 --> S10["10_secondary analysis.R"]
-    O9 --> S11["11_sensitivty analysis (180 days).R"]
-    O9 --> S12["12_MICE.R"]
+    O8 --> S09["09_Kaplan Maier and Fine Gray.R"]
+    O8 --> S10["10_secondary analysis.R"]
+    O8 --> S11["11_sensitivty analysis (180 days).R"]
+    O8 --> S12["12_MICE.R"]
 
     S11 --> O11["study3_analysis_sensitivity_min180d.rds"]
 ```
@@ -59,8 +58,8 @@ flowchart TD
 | `04_prose_inital cleaning.R` | `prose.xlsx` sheet `Hopkins_PROSEstudy`, `02_small_map.xlsx` | Renames via map; because no calendar follow-up date exists, defines `last_fu_days` as the maximum of observed event times (`days_to_death`, `days_to_app_shock`, `days_to_inapp_shock`); sets `t_followup_days = last_fu_days`; keeps exact device labels `SINGLE - Single` and `DUAL - Dual`; age >= 18 if available | `prose_events_clean.rds` |
 | `05_LCV_initial_script.R` | `LCV.xlsx` sheet `Hopkins_LVSCDstudy`, `02_small_map.xlsx` | Renames via map; creates `death_type` and `status`; coerces duration fields to numeric; converts some year-based durations to days; defines `t_followup_days` as the max of `days_to_death`, `time_to_app_therapy`, `time_to_inap_therapy`; age >= 18 if available | `lcv_events_clean.rds` |
 | `06_Dataset_merging_updated.R` | All five cleaned event RDS files, `ICD.csv`, `PROSE_LCVcommon participant.csv` | Standardizes the event variable set; adds missing columns as `NA`; labels source registry as `dataset`; stacks event datasets; creates prefixed IDs (`CERT_`, `HELS_`, `ISRL_`, `PRSI_`, `PRSL_..._MRI`) to match `ICD.csv`; merges event data into baseline ICD data by ID; keeps Study 3 datasets only; removes known LCV patients that are duplicated in PROSE | `study3_final_merged.rds`, `study3_final_merged.csv` |
-| `07_Descriptive_Table1_Table2.R` | `study3_final_merged.rds` | Restricts to `EUCERT`, `HELIOS`, `PROSE`, `ISRAEL`; derives `device_group` from `icd_type`; normalizes binary comorbidity/medication fields; creates `t_followup_days_final` from `t_followup_days` and preferentially replaces Israel follow-up with `t_followup_days_israel`; builds Table 1, Table 2, follow-up summaries, missingness summaries, incidence rates; derives `event_inapp_shock` via helper | `study3_device_analysis_cohort.rds`, `study3_analysis_cohort_v2_final_followup.rds`, `study3_analysis_final.rds`, plus descriptive CSV outputs |
-| `08_Cox models.R` | `study3_analysis_cohort_v2_final_followup.rds` | Reharmonizes `device_group`, creates `event_inapp_shock`, removes rows with `t_followup_days_final <= 0`, builds primary and sensitivity Cox models stratified by `dataset` | no new data table written |
+| `07_Descriptive_Table1_Table2.R` | `study3_final_merged.rds` | Restricts to `EUCERT`, `HELIOS`, `PROSE`, `ISRAEL`; derives `device_group` from `icd_type`; normalizes binary comorbidity/medication fields; creates `t_followup_days_final` from `t_followup_days` and preferentially replaces Israel follow-up with `t_followup_days_israel`; builds Table 1, Table 2, follow-up summaries, missingness summaries, incidence rates; derives `event_inapp_shock` via helper | `study3_device_analysis_cohort.rds`, `study3_analysis_final.rds`, plus descriptive CSV outputs |
+| `08_Cox models.R` | `study3_analysis_final.rds` | Reharmonizes `device_group`, creates `event_inapp_shock`, removes rows with `t_followup_days_final <= 0`, builds primary and sensitivity Cox models stratified by `dataset` | no new data table written |
 | `09_Kaplan Maier and Fine Gray.R` | `study3_analysis_final.rds` | Recreates `event_inapp_shock`; filters to positive follow-up and non-missing `device_group`; runs KM, log-rank, Fine-Gray, and cumulative incidence analyses; creates `fg_event` | figure and result CSV outputs |
 | `10_secondary analysis.R` | `study3_analysis_final.rds` | Creates subgroup variables (`age65`, `lvef30`, `nyha_bin`); runs univariable, multivariable, and interaction Cox models | no new data table written |
 | `11_sensitivty analysis (180 days).R` | `study3_analysis_final.rds` | Creates `fu_lt_6mo`; restricts to `t_followup_days_final >= 180`; reruns incidence rates, Cox, KM, Fine-Gray, CIF; creates `fg_event` in the sensitivity cohort | `study3_analysis_sensitivity_min180d.rds` and sensitivity output files |
@@ -107,8 +106,7 @@ flowchart TD
 
 ### 3. Final downstream survival-analysis cohort
 
-- Saved twice with the same object:
-  - `study3_analysis_cohort_v2_final_followup.rds`
+- Saved as:
   - `study3_analysis_final.rds`
 - This is the key final table for regression and time-to-event work.
 - It contains:
@@ -121,7 +119,7 @@ flowchart TD
 ### 4. Which scripts use which final table
 
 - `08_Cox models.R`
-  - reads `study3_analysis_cohort_v2_final_followup.rds`
+  - reads `study3_analysis_final.rds`
   - then filters to positive follow-up for Cox models
 - `09_Kaplan Maier and Fine Gray.R`
   - reads `study3_analysis_final.rds`
@@ -147,5 +145,5 @@ The main Study 3 data path is:
 4. Remove non-Study-3 rows and LCV/PROSE duplicate patients
 5. Save `study3_final_merged.rds`
 6. Create `device_group`, harmonize follow-up into `t_followup_days_final`, derive `event_inapp_shock`
-7. Save `study3_analysis_final.rds` / `study3_analysis_cohort_v2_final_followup.rds`
+7. Save `study3_analysis_final.rds`
 8. Use that final cohort for Cox, KM, Fine-Gray, sensitivity, and MICE analyses

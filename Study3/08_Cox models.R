@@ -12,7 +12,7 @@ library(survival)
 
 
 #################### 1. LOAD DATA ####################
-dt <- readRDS(study3_derived_path("study3_analysis_cohort_v2_final_followup.rds"))
+dt <- as.data.table(readRDS(study3_derived_path("study3_analysis_final.rds")))
 
 #################### 2. HARMONISE ICD TYPE → DEVICE GROUP ####################
 dt[, .N, by = .(dataset, device_group)][order(dataset, device_group)]
@@ -82,7 +82,7 @@ if (study3_debugging_enabled()) {
 dt_primary <- dt[
   dataset %in% c("EUCERT", "HELIOS", "PROSE", "ISRAEL") &
     !is.na(device_group) &
-    !is.na(t_followup_days_final)
+    !is.na(t_inapp_shock_or_censor_days)
 ]
 
 prop.table(table(dt_primary$device_group, dt_primary$event_inapp_shock),1)
@@ -112,7 +112,7 @@ if (study3_debugging_enabled()) {
 # Stratified by dataset
 
 cox_primary <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group + strata(dataset),
   data = dt_primary
 )
@@ -124,11 +124,11 @@ summary(cox_primary)
 dt_sens_no_israel <- dt[
   dataset %in% c("EUCERT", "HELIOS", "PROSE") &
     !is.na(device_group) &
-    !is.na(t_followup_days_final)
+    !is.na(t_inapp_shock_or_censor_days)
 ]
 
 cox_sens_no_israel <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group + strata(dataset),
   data = dt_sens_no_israel
 )
@@ -140,13 +140,13 @@ summary(cox_sens_no_israel)
 dt_inapp_valid <- dt[
   dataset %in% c("HELIOS","ISRAEL","PROSE") &
     !is.na(device_group) &
-    !is.na(t_followup_days_final)
+    !is.na(t_inapp_shock_or_censor_days)
 ]
 
 dt_inapp_valid[, .(n=.N, events=sum(event_inapp_shock)), by=.(dataset, device_group)]
 
 cox_valid <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group +  strata(dataset),
   data = dt_inapp_valid
 )
@@ -159,7 +159,7 @@ summary(cox_valid)
 dt_noNA <- dt[!is.na(inapp_shock_flag)]
 
 cox_noNA <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group + strata(dataset),
   data = dt_noNA
 )
@@ -169,7 +169,7 @@ summary(cox_noNA)
 ########## ADJUSTED MODEL (SUPPLEMENTARY) ##########
 
 cox_adj <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group + age_icd + Sex + strata(dataset),
   data = dt_primary
 )
@@ -179,7 +179,8 @@ summary(cox_adj)
 
 ########## QC 0: REQUIRED VARIABLES PRESENT ##########
 
-req <- c("dataset","device_group","t_followup_days_final","event_inapp_shock")
+req <- c("dataset","device_group","t_followup_days_final",
+         "t_inapp_shock_or_censor_days","event_inapp_shock")
 missing_req <- setdiff(req, names(dt_primary))
 stopifnot(length(missing_req) == 0)
 
@@ -223,7 +224,7 @@ dt_primary[
 
 
 fit <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group + strata(dataset),
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group + strata(dataset),
   data = dt_primary
 )
 
@@ -236,7 +237,7 @@ print(ph)
 by_dataset_cox <- dt_primary[
   ,
   {
-    fit <- coxph(Surv(t_followup_days_final, event_inapp_shock) ~ device_group, data = .SD)
+    fit <- coxph(Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group, data = .SD)
     s <- summary(fit)
     list(
       HR = s$conf.int["device_groupSingle","exp(coef)"],
@@ -260,7 +261,7 @@ loo_results <- lapply(datasets, function(d){
   tmp <- dt_primary[dataset != d]
   
   fit <- coxph(
-    Surv(t_followup_days_final, event_inapp_shock) ~
+    Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
       device_group + strata(dataset),
     data = tmp
   )

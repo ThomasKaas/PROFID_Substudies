@@ -33,7 +33,9 @@ if (study3_debugging_enabled()) {
   ), by = dataset][order(dataset)])
 }
 
-valid_survival_input <- !is.na(dt_final$t_followup_days_final) &
+valid_survival_input <- !is.na(dt_final$t_inapp_shock_or_censor_days) &
+  is.finite(dt_final$t_inapp_shock_or_censor_days) &
+  !is.na(dt_final$t_followup_days_final) &
   is.finite(dt_final$t_followup_days_final) &
   dt_final$t_followup_days_final > 0 &
   !is.na(dt_final$device_group)
@@ -61,12 +63,12 @@ if (any(!valid_survival_input)) {
 }
 
 km_fit <- survfit(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
   data = dt_final
 )
 
 logrank_fit <- survdiff(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
   data = dt_final
 )
 logrank_fit
@@ -479,15 +481,15 @@ dt_final[
 cat("N =", nrow(dt_final), "\n")
 print(table(dt_final$fg_event)) 
 
-stopifnot(all(!is.na(dt_final$t_followup_days_final)))
-stopifnot(all(dt_final$t_followup_days_final > 0))
+stopifnot(all(!is.na(dt_final$t_inapp_shock_or_censor_days)))
+stopifnot(all(dt_final$t_inapp_shock_or_censor_days >= 0))
 stopifnot(all(dt_final$fg_event %in% c(0L, 1L, 2L)))
 
 # Fine–Gray: sHR for Single vs Dual (Dual reference)
 X <- model.matrix(~ device_group, data = dt_final)[, -1, drop = FALSE]
 
 fg_fit <- crr(
-  ftime   = dt_final$t_followup_days_final,
+  ftime   = dt_final$t_inapp_shock_or_censor_days,
   fstatus = dt_final$fg_event,
   cov1    = X
 )
@@ -567,7 +569,7 @@ if (study3_debugging_enabled()) {
 }
 
 fg_fit_dataset <- crr(
-  ftime    = dt_final$t_followup_days_final,
+  ftime    = dt_final$t_inapp_shock_or_censor_days,
   fstatus  = dt_final$fg_event,
   cov1     = X_dataset,
   cengroup = dt_final$dataset
@@ -605,7 +607,7 @@ fwrite(
 cif <- with(
   dt_final,
   cuminc(
-    t_followup_days_final,
+    t_inapp_shock_or_censor_days,
     fg_event,
     group = device_group
   )

@@ -112,7 +112,7 @@ fwrite(incidence_rates_6mo, study3_output_path("incidence_rates_per_100py_by_dev
 
 ############# Cox model (stratified by dataset) — sensitivity###################
 cox_sens_6mo <- coxph(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group + strata(dataset),
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group + strata(dataset),
   data = dt_sens_6mo
 )
 cat("\n--- Cox sensitivity (>=180d) ---\n")
@@ -125,12 +125,12 @@ print(ph_sens_6mo)
 
 ####################################### Kaplan–Meier + log-rank — sensitivity ####################################
 km_sens_6mo <- survfit(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
   data = dt_sens_6mo
 )
 
 logrank_sens_6mo <- survdiff(
-  Surv(t_followup_days_final, event_inapp_shock) ~ device_group,
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
   data = dt_sens_6mo
 )
 
@@ -171,7 +171,7 @@ print(table(dt_sens_6mo$fg_event))
 X <- model.matrix(~ device_group, data = dt_sens_6mo)[, -1, drop = FALSE]
 
 fg_sens_6mo <- crr(
-  ftime   = dt_sens_6mo$t_followup_days_final,
+  ftime   = dt_sens_6mo$t_inapp_shock_or_censor_days,
   fstatus = dt_sens_6mo$fg_event,
   cov1    = X
 )
@@ -234,7 +234,7 @@ study3_extract_crr_device_result <- function(fit, term, model, dataset_handling,
 X_dataset <- model.matrix(~ device_group + dataset, data = dt_sens_6mo)[, -1, drop = FALSE]
 
 fg_sens_6mo_dataset <- crr(
-  ftime    = dt_sens_6mo$t_followup_days_final,
+  ftime    = dt_sens_6mo$t_inapp_shock_or_censor_days,
   fstatus  = dt_sens_6mo$fg_event,
   cov1     = X_dataset,
   cengroup = dt_sens_6mo$dataset
@@ -272,7 +272,7 @@ fwrite(
 # CIF plot
 cif_sens_6mo <- with(
   dt_sens_6mo,
-  cuminc(t_followup_days_final, fg_event, group = device_group)
+  cuminc(t_inapp_shock_or_censor_days, fg_event, group = device_group)
 )
 
 study3_save_grid(

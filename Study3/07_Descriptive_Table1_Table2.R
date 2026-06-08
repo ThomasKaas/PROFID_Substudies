@@ -665,11 +665,7 @@ table(dt_desc$dataset, dt_desc$total_inapp_shock)
 study3_add_inapp_shock_event(dt_analysis)
 
 saveRDS(
-  dt_analysis,
-  study3_derived_path("study3_analysis_cohort_v2_final_followup.rds")
-)
-saveRDS(
-  dt_analysis,
+  as.data.frame(dt_analysis),
   study3_derived_path("study3_analysis_final.rds")
 )
 

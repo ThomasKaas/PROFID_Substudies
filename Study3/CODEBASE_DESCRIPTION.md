@@ -64,11 +64,7 @@ The core data product of the merge step is:
 
 The main downstream analysis cohort created by the descriptive script is:
 
-- `study3_analysis_cohort_v2_final_followup.rds`
-
-The descriptive script also writes the same analysis cohort as
-`study3_analysis_final.rds`, which is the filename loaded by later modelling
-scripts.
+- `study3_analysis_final.rds`
 
 ## Master Runner, Execution Modes, And Debugging
 
@@ -482,7 +478,6 @@ Main outputs:
 - `supplement_missingness_by_device.csv`
 - `followup_summary_by_device.csv`
 - `incidence_rates_per_100py_by_device_primary_all_datasets.csv`
-- `study3_analysis_cohort_v2_final_followup.rds`
 - `study3_analysis_final.rds`
 
 Main steps:
@@ -532,7 +527,7 @@ Important implementation detail:
 
 Input:
 
-- `study3_analysis_cohort_v2_final_followup.rds`
+- `study3_analysis_final.rds`
 
 Primary endpoint:
 
@@ -544,7 +539,7 @@ Main exposure:
 
 Main steps:
 
-1. Loads the analysis cohort from `study3_analysis_cohort_v2_final_followup.rds`.
+1. Loads the analysis cohort from `study3_analysis_final.rds`.
 2. Re-harmonises ICD type into `device_group`.
 3. Standardises `inapp_shock_flag` by lowercasing and trimming.
 4. Defines `event_inapp_shock`:
@@ -872,7 +867,7 @@ Descriptive outputs:
 - `supplement_missingness_by_device.csv`
 - `followup_summary_by_device.csv`
 - `incidence_rates_per_100py_by_device_primary_all_datasets.csv`
-- `study3_analysis_cohort_v2_final_followup.rds`
+- `study3_analysis_final.rds`
 
 Sensitivity outputs:
 

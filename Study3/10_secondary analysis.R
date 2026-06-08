@@ -18,7 +18,7 @@ study3_add_inapp_shock_event(dt_final)
 vars_check <- c(
   "age_icd","Sex","BMI","eGFR","LVEF","Diabetes","AF_atrial_flutter","NYHA","Smoking",
   "Hypertension","Stroke_TIA","MR","device_group","dataset",
-  "t_followup_days_final","event_inapp_shock","death_flag"
+  "t_followup_days_final","t_inapp_shock_or_censor_days","event_inapp_shock","death_flag"
 )
 vars_check <- vars_check[vars_check %in% names(dt_final)]
 
@@ -73,14 +73,14 @@ if ("Stroke_TIA" %in% names(dt_final)) {
 run_uv <- function(var) {
   d <- dt_final[
     t_followup_days_final > 0 &
-      complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, get(var))])
+      complete.cases(dt_final[, .(t_inapp_shock_or_censor_days, event_inapp_shock, dataset, get(var))])
   ]
   
   if (nrow(d) == 0) return(NULL)
   if (is.factor(d[[var]]) && nlevels(d[[var]]) < 2) return(NULL)
   if (!is.factor(d[[var]]) && length(unique(d[[var]])) < 2) return(NULL)
   
-  f <- as.formula(paste0("Surv(t_followup_days_final, event_inapp_shock) ~ ", var, " + strata(dataset)"))
+  f <- as.formula(paste0("Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ ", var, " + strata(dataset)"))
   fit <- coxph(f, data = d)
   s <- summary(fit)
   
@@ -124,11 +124,11 @@ print(uv_res[p < 0.10])
 mv_vars <- c("device_group","age_icd","Sex","LVEF","Diabetes")
 mv_vars <- mv_vars[mv_vars %in% names(dt_final)]
 
-d_mv <- dt_final[complete.cases(dt_final[, c("t_followup_days_final","event_inapp_shock","dataset", mv_vars), with = FALSE])]
+d_mv <- dt_final[complete.cases(dt_final[, c("t_inapp_shock_or_censor_days","event_inapp_shock","dataset", mv_vars), with = FALSE])]
 d_mv <- d_mv[t_followup_days_final > 0]
 
 f_mv <- as.formula(
-  paste0("Surv(t_followup_days_final, event_inapp_shock) ~ ",
+  paste0("Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ ",
          paste(mv_vars, collapse = " + "),
          " + strata(dataset)")
 )
@@ -152,13 +152,13 @@ run_interaction <- function(subvar) {
   
   d <- dt_final[
     t_followup_days_final > 0 &
-      complete.cases(dt_final[, .(t_followup_days_final, event_inapp_shock, dataset, device_group, get(subvar))])
+      complete.cases(dt_final[, .(t_inapp_shock_or_censor_days, event_inapp_shock, dataset, device_group, get(subvar))])
   ]
   if (nrow(d) == 0) return(NULL)
   
   if (!is.factor(d[[subvar]]) && !is.numeric(d[[subvar]]) && !is.integer(d[[subvar]])) return(NULL)
   
-  f <- as.formula(paste0("Surv(t_followup_days_final, event_inapp_shock) ~ device_group * ", subvar, " + strata(dataset)"))
+  f <- as.formula(paste0("Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group * ", subvar, " + strata(dataset)"))
   fit <- coxph(f, data = d)
   s <- summary(fit)
   

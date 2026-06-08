@@ -335,14 +335,21 @@ study3_add_inapp_shock_event <- function(dt) {
     na = 0L
   )]
 
+  dt[, t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_final))]
+  shock_time_days <- rep(NA_real_, nrow(dt))
   if ("days_to_inapp_shock" %in% names(dt)) {
-    dt[
-      event_inapp_shock == 1 &
-        !is.na(days_to_inapp_shock) &
-        days_to_inapp_shock > t_followup_days_final,
-      days_to_inapp_shock := t_followup_days_final
-    ]
+    shock_time_days <- suppressWarnings(as.numeric(dt[["days_to_inapp_shock"]]))
+    shock_after_followup <- !is.na(shock_time_days) &
+      !is.na(dt[["t_followup_days_final"]]) &
+      shock_time_days > dt[["t_followup_days_final"]]
+    shock_time_days[shock_after_followup] <- dt[["t_followup_days_final"]][shock_after_followup]
+    dt[, days_to_inapp_shock := shock_time_days]
   }
+
+  # Use shock time for events and total follow-up for censored observations.
+  dt[, t_inapp_shock_or_censor_days := t_followup_days_final]
+  shock_event_rows <- dt[["event_inapp_shock"]] == 1L & !is.na(shock_time_days)
+  dt[shock_event_rows, t_inapp_shock_or_censor_days := shock_time_days[shock_event_rows]]
 
   invisible(dt)
 }
