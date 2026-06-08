@@ -318,6 +318,26 @@ load_study3_package <- function(package, ..., character.only = FALSE) {
   base::library(pkg, character.only = TRUE, ...)
 }
 
+format_warning_block <- function(step_id, warning_index, warning_condition) {
+  warning_call <- conditionCall(warning_condition)
+  warning_call_text <- if (is.null(warning_call)) {
+    NULL
+  } else {
+    paste(deparse(warning_call), collapse = " ")
+  }
+
+  lines <- c(
+    sprintf("[%s] WARNING %s #%d", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), step_id, warning_index),
+    sprintf("Message: %s", conditionMessage(warning_condition))
+  )
+
+  if (!is.null(warning_call_text) && nzchar(warning_call_text)) {
+    lines <- c(lines, sprintf("Call: %s", warning_call_text))
+  }
+
+  paste(lines, collapse = "\n")
+}
+
 missing_scripts <- selected$script[!file.exists(selected$script)]
 if (length(missing_scripts)) {
   stop(sprintf("Missing script(s): %s", paste(missing_scripts, collapse = ", ")),
@@ -351,6 +371,7 @@ started_at <- Sys.time()
 for (j in seq_len(nrow(selected))) {
   step <- selected[j, , drop = FALSE]
   step_start <- Sys.time()
+  step_warning_count <- 0L
 
   cat("\n")
   cat(strrep("=", 78), "\n", sep = "")
@@ -367,7 +388,15 @@ for (j in seq_len(nrow(selected))) {
       step_parent$install.packages <- install_missing_packages
       step_parent$library <- load_study3_package
       step_env <- new.env(parent = step_parent)
-      sys.source(step$script[[1]], envir = step_env, keep.source = FALSE)
+      withCallingHandlers(
+        sys.source(step$script[[1]], envir = step_env, keep.source = FALSE),
+        warning = function(w) {
+          step_warning_count <<- step_warning_count + 1L
+          cat("\n")
+          cat(format_warning_block(step$id[[1]], step_warning_count, w), "\n", sep = "")
+          invokeRestart("muffleWarning")
+        }
+      )
       NULL
     },
     error = function(e) e
@@ -394,6 +423,13 @@ for (j in seq_len(nrow(selected))) {
       cat("\nStopping after first failure. Use --continue-on-error to keep going.\n")
       quit(save = "no", status = 1L)
     }
+  }
+
+  if (step_warning_count > 0L) {
+    cat(sprintf("[%s] %s produced %d warning(s); full text printed above and saved in the master log.\n",
+                format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+                step$id[[1]],
+                step_warning_count))
   }
 }
 
