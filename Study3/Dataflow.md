@@ -62,7 +62,7 @@ flowchart TD
 | `08_Cox models.R` | `study3_analysis_final.rds` | Reharmonizes `device_group`, creates `event_inapp_shock`, removes rows with `t_followup_days_final <= 0`, builds primary and sensitivity Cox models stratified by `dataset` | no new data table written |
 | `09_Kaplan Maier and Fine Gray.R` | `study3_analysis_final.rds` | Recreates `event_inapp_shock`; filters to positive follow-up and non-missing `device_group`; runs KM, log-rank, Fine-Gray, and cumulative incidence analyses; creates `fg_event` | figure and result CSV outputs |
 | `10_secondary analysis.R` | `study3_analysis_final.rds` | Creates subgroup variables (`age65`, `lvef30`, `nyha_bin`); runs univariable, multivariable, and interaction Cox models | no new data table written |
-| `11_sensitivty analysis (180 days).R` | `study3_analysis_final.rds` | Creates `fu_lt_6mo`; restricts to `t_followup_days_final >= 180`; reruns incidence rates, Cox, KM, Fine-Gray, CIF; creates `fg_event` in the sensitivity cohort | `study3_analysis_sensitivity_min180d.rds` and sensitivity output files |
+| `11_sensitivty analysis (180 days).R` | `study3_analysis_final.rds` | Creates 180-day QC flags; restricts to `t_inapp_shock_or_censor_days >= 180` so the analyzed endpoint occurs at or after 180 days; reruns incidence rates, Cox, KM, Fine-Gray, CIF; creates `fg_event` in the sensitivity cohort | `study3_analysis_sensitivity_min180d.rds` and sensitivity output files |
 | `12_MICE.R` | `study3_analysis_final.rds` | Recreates `event_inapp_shock`; prepares factor coding; keeps SAP covariates with <30% missingness for imputation; runs `mice(m = 20)` and then a Cox model on imputed data | no new data table written |
 
 ## Follow-Up And Related Time/Event Variables
@@ -129,7 +129,7 @@ flowchart TD
   - uses it for univariable, multivariable, and subgroup Cox analyses
 - `11_sensitivty analysis (180 days).R`
   - reads `study3_analysis_final.rds`
-  - restricts to `t_followup_days_final >= 180`
+  - restricts to `t_inapp_shock_or_censor_days >= 180`
   - saves `study3_analysis_sensitivity_min180d.rds`
 - `12_MICE.R`
   - reads `study3_analysis_final.rds`

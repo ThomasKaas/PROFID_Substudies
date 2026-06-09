@@ -5,7 +5,8 @@
 This document consolidates:
 
 - substantive preprocessing and statistical-analysis changes identified from
-  the Git commit history of the `Study3/` analysis scripts; and
+  the Git commit history and current workspace state of the `Study3/` analysis
+  scripts; and
 - the HPC, local-execution, plotting, diagnostics, and output adaptations
   previously documented in `Changelog_HPC_Adaptations.md`.
 
@@ -18,8 +19,9 @@ The original uploaded Study 3 scripts are used as the analytical baseline.
 
 Most changes made while adapting Study 3 for HPC execution concern paths,
 runner infrastructure, diagnostics, plot presentation, and output handling.
-However, the Git history also contains significant preprocessing, cohort
-filtering, endpoint-classification, and statistical-model changes.
+However, the Git history and current workspace state also contain significant
+preprocessing, cohort filtering, endpoint-classification, and
+statistical-model changes.
 
 The most consequential analytical changes are:
 
@@ -35,6 +37,9 @@ The most consequential analytical changes are:
    sensitivity analyses.
 6. Inappropriate-shock event derivation was centralized and persisted across
    the pipeline.
+7. The 180-day sensitivity cohort is now restricted using analyzed endpoint
+   time rather than total follow-up, excluding early inappropriate shocks that
+   were previously retained.
 
 The earlier statement that no statistical logic, filtering rule, endpoint
 classification, or transformation changed applied to the initial HPC port, but
@@ -55,6 +60,7 @@ material preprocessing and analysis-inclusion changes.
 | 2026-06-07 | `b790195` | Israel preprocessing | Supplemented Israel follow-up and mortality using validated endpoint data | Changes Israel follow-up times, death status, and survival eligibility |
 | 2026-06-07 | `b790195` | Date preprocessing | Replaced Israel date-parsing logic | Supports more formats and stops forced conversion of pre-2000 dates |
 | 2026-06-07 | `b790195` | Survival analysis | Added positive-follow-up exclusions to secondary Cox analyses and corrected primary Fine-Gray death coding | Changes secondary-model populations and competing-event counts |
+| 2026-06-09 | `working tree` | Sensitivity cohort definition | Corrected the 180-day sensitivity restriction to use analyzed endpoint time | Excludes early inappropriate shocks that had total follow-up >= 180 days but event time < 180 days |
 
 ## 1. Inappropriate-Shock Event Derivation Centralized and Persisted
 
@@ -297,6 +303,59 @@ The available debug output showed why this matters:
 This materially changes competing-event classification in the primary
 Fine-Gray analysis and can materially change its estimates.
 
+## 8. 180-Day Sensitivity Restriction Corrected To Use Endpoint Time
+
+**Commit:** `working tree`  
+**Affected file:** `11_sensitivty analysis (180 days).R`
+
+The minimum-180-day sensitivity cohort was previously defined as:
+
+```r
+dt_sens_6mo <- dt_final[t_followup_days_final >= min_fu_days]
+```
+
+This used total follow-up to determine eligibility, even though inappropriate
+shock cases are timed in the analysis by `t_inapp_shock_or_censor_days`, which
+uses actual shock time for events and follow-up time for censoring.
+
+As a result, patients with:
+
+- total follow-up of at least 180 days; but
+- an actual inappropriate shock before day 180
+
+were incorrectly retained in the 180-day sensitivity cohort.
+
+The cohort definition is now:
+
+```r
+dt_sens_6mo <- dt_final[
+  !is.na(t_inapp_shock_or_censor_days) &
+    t_inapp_shock_or_censor_days >= min_fu_days
+]
+```
+
+The QC block in the same script was also expanded to report:
+
+- records below 180 days by total follow-up;
+- records below 180 days by analyzed endpoint time;
+- shock cases with actual shock time before 180 days;
+- shock cases excluded by the corrected rule; and
+- shock cases missed by the previous follow-up-based rule.
+
+Local verification against `study3_analysis_final.rds` showed:
+
+- old cohort: 2,853 patients, 73 inappropriate shocks;
+- corrected cohort: 2,837 patients, 57 inappropriate shocks; and
+- 16 inappropriate-shock cases removed because shock time was before day 180
+  despite total follow-up of at least 180 days.
+
+### Impact
+
+This is a substantive cohort-definition correction in the 180-day sensitivity
+analysis. It changes the analyzed population and event count so that the
+sensitivity restriction now matches the manuscript statement that patients must
+have at least 180 days before the analyzed endpoint.
+
 ---
 
 # Part II: HPC, Execution, Diagnostics, and Output Adaptations
@@ -431,12 +490,23 @@ Figure 1 was revised to:
 
 - display follow-up through 2,200 days and label the x-axis in years;
 - use a full 0.00-to-1.00 main y-axis;
-- include an enlarged zoom inset;
+- include a substantially enlarged untitled zoom inset;
 - display single-lead devices as a blue solid curve and double-lead devices as
   a red dashed curve;
-- add and refine a number-at-risk table;
-- manually draw thinner censoring marks;
-- refine spacing, labels, legend position, and typography;
+- add semi-transparent 95% confidence-interval ribbons around both Kaplan-Meier
+  curves in the main panel and inset;
+- add and refine a Study 1-style number-at-risk table as a separate lower
+  panel;
+- manually draw thinner censoring marks, with separate smaller tick styling in
+  the inset;
+- move the legend and log-rank annotation into the left side of the inset, with
+  the log-rank label placed below the legend and aligned to the legend line
+  symbols;
+- enlarge and reposition the inset to keep the zoomed curves, confidence
+  ribbons, legend, and annotation readable; and
+- harmonize spacing, labels, and typography so the main axes, inset axes,
+  legend, log-rank annotation, x-axis title, and numbers-at-risk use a
+  consistent larger text size;
 - save PNG and PDF copies; and
 - export the underlying curve and risk-table data to CSV.
 

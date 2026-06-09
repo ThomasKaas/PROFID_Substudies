@@ -895,11 +895,15 @@ Main steps:
 
 ```r
 min_fu_days <- 180
-dt_sens_6mo <- dt_final[t_followup_days_final >= min_fu_days]
+dt_sens_6mo <- dt_final[
+  !is.na(t_inapp_shock_or_censor_days) &
+    t_inapp_shock_or_censor_days >= min_fu_days
+]
 ```
 
-2. Reports excluded counts and events among those with follow-up below 180
-   days.
+2. Reports excluded counts under both the old follow-up-based rule and the
+   corrected endpoint-time rule, including early inappropriate shocks that
+   would otherwise remain in the cohort.
 3. Reports sensitivity cohort size and event counts.
 4. Calculates incidence rates per 100 person-years for:
    - inappropriate shock
