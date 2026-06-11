@@ -65,6 +65,16 @@ dt_desc <- dt_desc[!is.na(device_group)]
 table(dt_desc$device_group)
 table(dt_desc$Hypertension, dt_desc$device_group)
 table(dt_desc$dataset)
+
+dt_desc[, t_followup_days_final := suppressWarnings(as.numeric(t_followup_days))]
+
+# Prefer validated Israel-specific follow-up when available.
+if ("t_followup_days_israel" %in% names(dt_desc)) {
+  dt_desc[
+    dataset == "ISRAEL" & !is.na(t_followup_days_israel),
+    t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_israel))
+  ]
+}
 ####### VARIABLES FOR TABLE 1 #######
 
 vars_continuous <- c("age_icd","BMI","LVEF","eGFR")
@@ -115,10 +125,20 @@ dt_desc[, .(n_yes=sum(get("Anti_coagulant")=="Yes", na.rm=TRUE),
 
 ####### TABLE 1 — BASELINE DESCRIPTIVES (OVERALL + BY DEVICE) #######
 
+# Align Table 1 with the primary time-to-event analysis population used later
+# in the Cox and Kaplan-Meier scripts.
+dt_table1 <- dt_desc[
+  !is.na(t_inapp_shock_or_censor_days) &
+    is.finite(t_inapp_shock_or_censor_days) &
+    !is.na(t_followup_days_final) &
+    is.finite(t_followup_days_final) &
+    t_followup_days_final > 0
+]
+
 table1 <- CreateTableOne(
   vars        = vars_table1,
   strata      = "device_group",
-  data        = dt_desc,
+  data        = dt_table1,
   factorVars  = vars_categorical,
   includeNA  = TRUE,
   addOverall = TRUE
@@ -133,16 +153,6 @@ print(
 
 
 ####### COHORT 2: DEVICE COMPARISON / INFERENTIAL ANALYSES
-
-dt_desc[, t_followup_days_final := suppressWarnings(as.numeric(t_followup_days))]
-
-# Prefer validated Israel-specific follow-up when available.
-if ("t_followup_days_israel" %in% names(dt_desc)) {
-  dt_desc[
-    dataset == "ISRAEL" & !is.na(t_followup_days_israel),
-    t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_israel))
-  ]
-}
 
 dt_analysis <- dt_desc
 
