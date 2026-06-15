@@ -75,6 +75,9 @@ if ("t_followup_days_israel" %in% names(dt_desc)) {
     t_followup_days_final := suppressWarnings(as.numeric(t_followup_days_israel))
   ]
 }
+
+# Derive the persisted endpoint fields before any Table 1 filtering uses them.
+study3_add_inapp_shock_event(dt_desc)
 ####### VARIABLES FOR TABLE 1 #######
 
 vars_continuous <- c("age_icd","BMI","LVEF","eGFR")

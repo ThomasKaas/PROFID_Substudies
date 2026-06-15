@@ -661,41 +661,51 @@ Main steps:
    - Single: `single`, `vvi`, `icd_1`
    - Dual: `dual`, `ddd`, `icd_2`
 5. Restricts to records classified as Single or Dual.
-6. Defines Table 1 variables:
+6. Builds `t_followup_days_final`:
+   - `t_followup_days_israel` for Israel, if that variable exists
+   - `t_followup_days` for non-Israel datasets
+7. Calls `study3_add_inapp_shock_event(dt_desc)` to derive
+   `event_inapp_shock` and `t_inapp_shock_or_censor_days` before Table 1
+   filtering and before saving `study3_analysis_final.rds`.
+8. Defines Table 1 variables:
    - Continuous: `age_icd`, `BMI`, `LVEF`, `eGFR`
    - Categorical: `Sex`, `NYHA`, `AF_atrial_flutter`, `Diabetes`,
      `Hypertension`, `COPD`, `Stroke_TIA`, `Smoking`,
      `ACE_inhibitor_ARB`, `Beta_blockers`, `Anti_arrhythmic_III`,
      `Anti_platelet`, `Anti_coagulant`
-7. Normalises yes/no fields to `Yes`, `No`, or `NA`.
-8. For medication variables, converts patient-level `NA` to `No` only inside
+9. Normalises yes/no fields to `Yes`, `No`, or `NA`.
+10. For medication variables, converts patient-level `NA` to `No` only inside
    registries where the variable is available and not entirely missing.
-9. Creates Table 1 with `tableone::CreateTableOne()`.
-10. Builds `t_followup_days_final`:
-    - For Israel: `t_followup_days_israel`, if present.
-    - For other datasets: `t_followup_days`.
-11. Performs normality checks by device group using Shapiro tests where sample
+11. Restricts Table 1 to rows with non-missing finite
+    `t_inapp_shock_or_censor_days` and positive finite
+    `t_followup_days_final`, then creates Table 1 with
+    `tableone::CreateTableOne()`.
+12. Performs normality checks by device group using Shapiro tests where sample
     size is 3 to 5000.
-12. Compares continuous variables using Wilcoxon rank-sum if non-normal,
+13. Compares continuous variables using Wilcoxon rank-sum if non-normal,
     otherwise t-test.
-13. Compares categorical variables using Fisher exact test when any cell count
+14. Compares categorical variables using Fisher exact test when any cell count
     is less than 5, otherwise chi-square.
-14. Writes follow-up and missingness summaries.
-15. Builds Table 2 style endpoint summaries.
-16. Normalises endpoint flags:
+15. Writes follow-up and missingness summaries.
+16. Builds Table 2 style endpoint summaries.
+17. Normalises endpoint flags:
     - `inapp_shock_flag`
     - `app_shock_flag`
     - `death_flag`
-17. Applies the main rule that missing `inapp_shock_flag` is treated as `No`.
-18. Creates incidence rates per 100 person-years by device group using Poisson
+18. Applies the main rule that missing `inapp_shock_flag` is treated as `No`.
+19. Creates incidence rates per 100 person-years by device group using Poisson
     confidence intervals.
-19. Performs QC checks on raw endpoint values, follow-up by dataset, shock
+20. Performs QC checks on raw endpoint values, follow-up by dataset, shock
     dates with missing flags, and follow-up by inappropriate shock status.
-20. Summarises death among patients with inappropriate shock and burden of
+21. Summarises death among patients with inappropriate shock and burden of
     recurrent inappropriate shocks.
 
 Important implementation detail:
 
+- The shared helper `study3_add_inapp_shock_event()` is called before the
+  Table 1 filter that uses `t_inapp_shock_or_censor_days`, and again before
+  saving `study3_analysis_final.rds`. This fixes endpoint-field availability
+  without changing the endpoint rule.
 - The script creates `new_Status3` in `dt_table2` and then checks whether
   `"Status"` exists in `dt_analysis`. Most earlier scripts use lowercase
   `status`, so this may leave `new_Status3` missing unless a baseline column
@@ -1011,7 +1021,9 @@ The main event indicator for survival analysis:
 - `1` if `inapp_shock_flag` standardises to `yes`
 - `0` if `inapp_shock_flag` is `no`, `unknown`, or missing
 
-This "missing as no event" rule is applied in Table 2 and Cox modelling.
+This "missing as no event" rule is applied through the shared
+`study3_add_inapp_shock_event()` helper in script `07` and in downstream
+survival scripts.
 
 ### `t_followup_days`
 
@@ -1029,6 +1041,19 @@ Analysis follow-up variable used in descriptive and survival analyses. In
 Since `t_followup_days_israel` is not visibly created in the current Israel
 script, Israel follow-up may remain missing depending on which merge script and
 upstream data version are used.
+
+### `t_inapp_shock_or_censor_days`
+
+Derived by `study3_add_inapp_shock_event()`.
+
+- Starts as `t_followup_days_final`
+- For inappropriate shock events with non-missing `days_to_inapp_shock`, uses
+  the shock time instead
+- If `days_to_inapp_shock > t_followup_days_final`, the shock time is capped at
+  `t_followup_days_final`
+
+In `07_Descriptive_Table1_Table2.R`, this field is created before the Table 1
+filter and is also written into `study3_analysis_final.rds`.
 
 ### `status`
 

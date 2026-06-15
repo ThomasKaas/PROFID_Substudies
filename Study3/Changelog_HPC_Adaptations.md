@@ -136,7 +136,12 @@ The QC line remains in `Study3/08_Cox models.R`:
 dt[, .N, by = .(dataset, event_inapp_shock)]
 ```
 
-The helper is now called before saving `study3_analysis_final.rds` in `Study3/07_Descriptive_Table1_Table2.R`, so the derived dataset contains the endpoint expected by later scripts. It is also called after loading the RDS in scripts `08` to `12`, so resumed HPC runs use the same endpoint definition even if the RDS was generated before this fix.
+The helper is now called in `Study3/07_Descriptive_Table1_Table2.R`
+immediately after `t_followup_days_final` is finalized, so
+`t_inapp_shock_or_censor_days` exists before the Table 1 filter runs and
+before `study3_analysis_final.rds` is saved. It is also called after loading
+the RDS in scripts `08` to `12`, so resumed HPC runs use the same endpoint
+definition even if the RDS was generated before this fix.
 
 This does not change any statistical analysis logic, model formula, filtering rule, covariate set, endpoint definition, or transformation. It only makes the pre-existing endpoint derivation reusable and persistent across the pipeline.
 

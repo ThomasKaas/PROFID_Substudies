@@ -83,14 +83,18 @@ The helper:
 - sets `days_to_inapp_shock` equal to `t_followup_days_final` when a recorded
   inappropriate-shock time exceeds final follow-up.
 
-The helper is called before saving `study3_analysis_final.rds` and after that
-dataset is loaded by downstream analysis scripts.
+The helper is called in `07_Descriptive_Table1_Table2.R` immediately after
+`t_followup_days_final` is built, so both the Table 1 filter and the saved
+`study3_analysis_final.rds` see the same derived endpoint fields. Downstream
+analysis scripts also call the helper after loading that dataset.
 
 ### Impact
 
 The intended endpoint rule was not changed by this commit. The significant
 change is that the endpoint derivation is now reusable, persistent, and
-consistently available to resumed or separately executed analysis steps.
+consistently available to resumed or separately executed analysis steps. In the
+current workspace state, this also fixes the script-07 ordering bug where
+`t_inapp_shock_or_censor_days` was referenced before it had been derived.
 
 ## 2. Invalid Survival Inputs Explicitly Excluded
 
