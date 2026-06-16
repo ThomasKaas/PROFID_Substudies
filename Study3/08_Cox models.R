@@ -109,15 +109,25 @@ if (study3_debugging_enabled()) {
 }
 
 ########## PRIMARY COX MODEL ##########
-# Stratified by dataset
+# First pooled without dataset adjustment, then stratified by dataset.
 
+cat("\nPRIMARY COX MODEL - pooled, no dataset adjustment\n")
+cox_primary_pooled <- coxph(
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
+    device_group,
+  data = dt_primary
+)
+
+print(summary(cox_primary_pooled))
+
+cat("\nPRIMARY COX MODEL - dataset-adjusted, stratified by dataset\n")
 cox_primary <- coxph(
   Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~
     device_group + strata(dataset),
   data = dt_primary
 )
 
-summary(cox_primary)
+print(summary(cox_primary))
 
 ########## SENSITIVITY ANALYSIS (EXCLUDING ISRAEL) ##########
 
