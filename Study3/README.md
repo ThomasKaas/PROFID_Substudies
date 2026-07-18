@@ -33,6 +33,7 @@ Top-level files in `Study3/` are organised as numbered R scripts:
 | `10_secondary analysis.R` | Runs secondary Cox analyses, covariate screening, multivariable models, and subgroup interactions. |
 | `11_sensitivty analysis (180 days).R` | Runs a 180-day minimum follow-up sensitivity analysis. |
 | `12_MICE.R` | Runs SAP-style multiple imputation sensitivity analysis for covariates with less than 30 percent missingness. |
+| `13_Figure3_forest_plot.R` | Creates Figure 3, a forest plot of the primary, competing-risk, and sensitivity analyses. |
 | `master_run.R` | Canonical sequential runner with default/HPC, local, debugging, and step-selection modes. |
 | `run_study3.sh` | Slurm submission wrapper that forwards runner options. |
 | `study3_paths.R` | Shared path, debugging, endpoint, and graphics helpers. |
@@ -443,18 +444,18 @@ Main steps:
    - `Outcome`
 2. Merges all sheets by `PAT_INDEX`.
 3. Renames variables via the small map's `Helios` column.
-4. Treats implant, death, and follow-up values as years:
-   - `implant_year`
-   - `death_year`
-   - `fu_year`
-5. Computes `followup_years` and then `t_followup_days = followup_years * 365`.
+4. Preserves the direct HELIOS duration fields before harmonised renaming.
+5. Defines `t_followup_days` from `DAYS2DEATH.ICD` for deceased patients and
+   `DAYS2LastFU.ICD` for censored patients.
 6. Restricts device type to exact `ICD_1` and `ICD_2`.
 7. Applies adult age restriction using `age_icd`, if present.
-8. Keeps event-related variables and saves `helios_events_clean.rds`.
+8. Excludes missing, non-finite, or non-positive follow-up.
+9. Keeps event-related variables and saves `helios_events_clean.rds`.
 
 Notable detail:
 
-- HELIOS follow-up is year-based, not full date-based.
+- HELIOS follow-up uses the same direct day-offset variables as Study 1; no
+  calendar-year approximation is applied.
 - The input file is named `Helius.xlsx` in the script, while the study/dataset
   is referred to as HELIOS elsewhere. The spelling should be verified against
   the real raw file.
@@ -1133,6 +1134,12 @@ Kaplan-Meier / Fine-Gray outputs:
 - `figure_1_km_number_at_risk_long_2200d.csv`
 - `figure_1_km_number_at_risk_wide_2200d.csv`
 - `finegray_primary_device_results.csv`
+
+Figure 3 outputs:
+
+- `figure_3_forest_primary_competing_risk_sensitivity.png`
+- `figure_3_forest_primary_competing_risk_sensitivity.pdf`
+- `figure_3_forest_plot_results.csv`
 
 ## Quality Control Embedded In Scripts
 

@@ -16,25 +16,65 @@ path_smallmap <- study3_metadata_path("02_small_map.xlsx")
 
 ###################### 2. READ AND MERGE HELIOS SHEETS ######################
 
-dt_target   <- as.data.table(read_excel(path_helios, sheet = "target_pop"))
-dt_base     <- as.data.table(read_excel(path_helios, sheet = "Baseline Characteristics"))
-dt_pmh_icd  <- as.data.table(read_excel(path_helios, sheet = "Past Medical History (ICD10)"))
-dt_pmh_ops  <- as.data.table(read_excel(path_helios, sheet = "Past Medical History (OPS)"))
-dt_med      <- as.data.table(read_excel(path_helios, sheet = "Medication (ATC)"))
-dt_lab      <- as.data.table(read_excel(path_helios, sheet = "Lab Data"))
-dt_imaging  <- as.data.table(read_excel(path_helios, sheet = "Imaging"))
-dt_cmr      <- as.data.table(read_excel(path_helios, sheet = "CMR-Scar and GZ"))
-dt_ecg      <- as.data.table(read_excel(path_helios, sheet = "ECG"))
-dt_icd_q    <- as.data.table(read_excel(path_helios, sheet = "ICD queries"))
-dt_outcome  <- as.data.table(read_excel(path_helios, sheet = "Outcome"))
+read_sheet_dt <- function(sheet_name) {
+  as.data.table(read_excel(path_helios, sheet = sheet_name))
+}
 
-merge_list <- list(
-  dt_target, dt_base, dt_pmh_icd, dt_pmh_ops,
-  dt_med, dt_lab, dt_imaging, dt_cmr,
-  dt_ecg, dt_icd_q, dt_outcome
+merge_unique_pat_sheet <- function(dt_main, sheet_name) {
+  x <- read_sheet_dt(sheet_name)
+  stopifnot("PAT_INDEX" %in% names(x))
+  stopifnot(!anyDuplicated(x$PAT_INDEX))
+  merge(dt_main, x, by = "PAT_INDEX", all = TRUE)
+}
+
+dt_target <- read_sheet_dt("target_pop")
+stopifnot("PAT_INDEX" %in% names(dt_target))
+stopifnot(!anyDuplicated(dt_target$PAT_INDEX))
+
+dt_base <- read_sheet_dt("Baseline Characteristics")
+stopifnot("PAT_INDEX" %in% names(dt_base))
+stopifnot(!anyDuplicated(dt_base$PAT_INDEX))
+
+dt_full <- merge(dt_target, dt_base, by = "PAT_INDEX", all = TRUE)
+dt_full <- merge_unique_pat_sheet(dt_full, "Past Medical History (ICD10)")
+dt_full <- merge_unique_pat_sheet(dt_full, "Past Medical History (OPS)")
+dt_full <- merge_unique_pat_sheet(dt_full, "Medication (ATC)")
+dt_full <- merge_unique_pat_sheet(dt_full, "Lab Data")
+dt_full <- merge_unique_pat_sheet(dt_full, "ECG")
+dt_full <- merge_unique_pat_sheet(dt_full, "ICD queries")
+dt_full <- merge_unique_pat_sheet(dt_full, "Outcome")
+dt_full <- merge_unique_pat_sheet(dt_full, "CMR-Scar and GZ")
+
+# Match Study 1 duplicate handling: Imaging may have multiple rows per patient,
+# so keep the first row per PAT_INDEX before merging.
+dt_imaging <- read_sheet_dt("Imaging")
+stopifnot("PAT_INDEX" %in% names(dt_imaging))
+dt_imaging_first <- dt_imaging[order(PAT_INDEX)][, lapply(.SD, function(v) v[1]), by = PAT_INDEX]
+dt_full <- merge(dt_full, dt_imaging_first, by = "PAT_INDEX", all = TRUE)
+
+required_followup_source_vars <- c(
+  "Death",
+  "DAYS2DEATH.ICD",
+  "DAYS2LastFU.ICD"
 )
+missing_followup_source_vars <- setdiff(
+  required_followup_source_vars,
+  names(dt_full)
+)
+if (length(missing_followup_source_vars)) {
+  stop(
+    sprintf(
+      "Required HELIOS source follow-up variable(s) missing: %s",
+      paste(missing_followup_source_vars, collapse = ", ")
+    ),
+    call. = FALSE
+  )
+}
 
-dt_full <- Reduce(function(x, y) merge(x, y, by = "PAT_INDEX", all = TRUE), merge_list)
+# Preserve the direct source fields before the small-map renaming step.
+dt_full[, helios_death_flag_source := as.character(Death)]
+dt_full[, helios_death_days_source := suppressWarnings(as.numeric(DAYS2DEATH.ICD))]
+dt_full[, helios_last_fu_days_source := suppressWarnings(as.numeric(DAYS2LastFU.ICD))]
 
 ###################### 3. RENAME USING SMALL MAP ######################
 
@@ -53,20 +93,24 @@ for (i in seq_len(nrow(rename_map))) {
   if (old %in% names(dt_full)) setnames(dt_full, old, new)
 }
 
-###################### 4. FOLLOW-UP DEFINITION (YEAR → DAYS) ######################
+###################### 4. FOLLOW-UP DEFINITION (DIRECT DAYS) ######################
 
-dt_full[, implant_year := as.numeric(icd_implant_date)]
-dt_full[, death_year   := as.numeric(death_date)]
-dt_full[, fu_year      := as.numeric(last_fu_date)]
+# Use the validated HELIOS day-offset variables also used in Study 1. Calendar
+# year subtraction loses within-year follow-up and can therefore create
+# artificial zero-day observations.
+dt_full[, days_to_death := helios_death_days_source]
+dt_full[, last_fu_days := helios_last_fu_days_source]
 
-dt_full[, followup_years := fifelse(
-  death_flag %chin% c("Yes","yes","YES"),
-  death_year - implant_year,
-  fu_year    - implant_year
+dt_full[, t_followup_days := fcase(
+  tolower(trimws(helios_death_flag_source)) == "yes", days_to_death,
+  tolower(trimws(helios_death_flag_source)) == "no",  last_fu_days,
+  default = NA_real_
 )]
 
-dt_full[, t_followup_days := followup_years * 365]
-dt_full[t_followup_days < 0, t_followup_days := NA]
+dt_full[
+  !is.na(t_followup_days) & !is.finite(t_followup_days),
+  t_followup_days := NA_real_
+]
 
 str(dt_full)
 unique(dt_full$icd_type)
@@ -84,7 +128,25 @@ if ("age_icd" %in% names(dt)) {
   dt <- dt[age_icd >= 18 | is.na(age_icd)]
 }
 
+invalid_followup <- is.na(dt$t_followup_days) |
+  !is.finite(dt$t_followup_days) |
+  dt$t_followup_days <= 0
 
+if (any(invalid_followup)) {
+  cat(
+    "Excluding ",
+    sum(invalid_followup),
+    " HELIOS row(s) with missing or non-positive direct follow-up time.\n",
+    sep = ""
+  )
+  dt <- dt[!invalid_followup]
+}
+
+stopifnot(
+  all(!is.na(dt$t_followup_days)),
+  all(is.finite(dt$t_followup_days)),
+  all(dt$t_followup_days > 0)
+)
 
 ###################### 6. SELECT STUDY-3 EVENT VARIABLES ######################
 
@@ -116,7 +178,7 @@ event_vars <- c(
   "death_flag",
   "days_to_death",
   "last_fu_date",
-  "followup_years",
+  "last_fu_days",
   "t_followup_days",
   "sudden_cardiac_death_flag"
 )

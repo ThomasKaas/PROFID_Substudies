@@ -293,18 +293,16 @@ Main steps:
    - `Outcome`
 2. Merges all sheets by `PAT_INDEX`.
 3. Renames variables via the small map's `Helios` column.
-4. Treats implant, death, and follow-up values as years:
-   - `implant_year`
-   - `death_year`
-   - `fu_year`
-5. Computes `followup_years` and then `t_followup_days = followup_years * 365`.
+4. Preserves the direct HELIOS duration fields before harmonised renaming.
+5. Defines `t_followup_days` from `DAYS2DEATH.ICD` for deceased patients and `DAYS2LastFU.ICD` for censored patients.
 6. Restricts device type to exact `ICD_1` and `ICD_2`.
 7. Applies adult age restriction using `age_icd`, if present.
-8. Keeps event-related variables and saves `helios_events_clean.rds`.
+8. Excludes missing, non-finite, or non-positive follow-up.
+9. Keeps event-related variables and saves `helios_events_clean.rds`.
 
 Notable detail:
 
-- HELIOS follow-up is year-based, not full date-based.
+- HELIOS follow-up uses the same direct day-offset variables as Study 1; no calendar-year approximation is applied.
 - The input file is named `Helius.xlsx` in the script, while the study/dataset is referred to as HELIOS elsewhere. The spelling should be verified against the real raw file.
 
 ### `03_israel_initial_cleaning.R`

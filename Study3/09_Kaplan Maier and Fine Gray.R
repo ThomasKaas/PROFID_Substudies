@@ -253,7 +253,8 @@ study3_export_figure1_data <- function(fit, labels, x_limit = 2200) {
 }
 
 study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
-                                           logrank_p = NA_real_) {
+                                           logrank_p = NA_real_,
+                                           show_inset = FALSE) {
   x_axis <- study3_figure1_year_axis(x_limit)
   x_breaks <- x_axis$days
   panel_xlim <- c(0, x_limit)
@@ -378,110 +379,134 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
     col = "#1E3557"
   )
 
-  to_inset_x <- function(x) inset_x[[1]] + (x / x_limit) * diff(inset_x)
-  to_inset_y <- function(y) {
-    inset_y[[1]] + ((y - inset_ylim[[1]]) / diff(inset_ylim)) * diff(inset_y)
-  }
-
-  rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], col = "white", border = NA)
-  clip(inset_x[[1]], inset_x[[2]], inset_y[[1]], inset_y[[2]])
-  for (i in seq_along(labels)) {
-    group_curve <- curve_dt[device_group == labels[[i]]][order(time_days)]
-    study3_draw_km_ci(
-      curve_data = group_curve,
-      x_limit = x_limit,
-      col = ci_fill_col[[i]],
-      transform_x = to_inset_x,
-      transform_y = to_inset_y
-    )
-    if (nrow(group_curve)) {
-      lines(
-        to_inset_x(group_curve$time_days),
-        to_inset_y(group_curve$survival),
-        type = "s",
-        col = curve_col[[i]],
-        lty = curve_lty[[i]],
-        lwd = 1.35
-      )
+  if (isTRUE(show_inset)) {
+    to_inset_x <- function(x) inset_x[[1]] + (x / x_limit) * diff(inset_x)
+    to_inset_y <- function(y) {
+      inset_y[[1]] + ((y - inset_ylim[[1]]) / diff(inset_ylim)) * diff(inset_y)
     }
 
-    if (length(censor_summary$time)) {
-      tick_idx <- which(
-        censor_strata == labels[[i]] &
-          censor_summary$n.censor > 0 &
-          censor_summary$time >= 0 &
-          censor_summary$time <= x_limit &
-          !is.na(censor_summary$surv)
+    rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], col = "white", border = NA)
+    clip(inset_x[[1]], inset_x[[2]], inset_y[[1]], inset_y[[2]])
+    for (i in seq_along(labels)) {
+      group_curve <- curve_dt[device_group == labels[[i]]][order(time_days)]
+      study3_draw_km_ci(
+        curve_data = group_curve,
+        x_limit = x_limit,
+        col = ci_fill_col[[i]],
+        transform_x = to_inset_x,
+        transform_y = to_inset_y
       )
-
-      if (length(tick_idx)) {
-        segments(
-          x0 = to_inset_x(censor_summary$time[tick_idx]),
-          y0 = to_inset_y(censor_summary$surv[tick_idx] - inset_censor_tick_half_height),
-          x1 = to_inset_x(censor_summary$time[tick_idx]),
-          y1 = to_inset_y(censor_summary$surv[tick_idx] + inset_censor_tick_half_height),
+      if (nrow(group_curve)) {
+        lines(
+          to_inset_x(group_curve$time_days),
+          to_inset_y(group_curve$survival),
+          type = "s",
           col = curve_col[[i]],
-          lwd = inset_censor_tick_lwd,
-          lend = "butt"
+          lty = curve_lty[[i]],
+          lwd = 1.35
         )
       }
+
+      if (length(censor_summary$time)) {
+        tick_idx <- which(
+          censor_strata == labels[[i]] &
+            censor_summary$n.censor > 0 &
+            censor_summary$time >= 0 &
+            censor_summary$time <= x_limit &
+            !is.na(censor_summary$surv)
+        )
+
+        if (length(tick_idx)) {
+          segments(
+            x0 = to_inset_x(censor_summary$time[tick_idx]),
+            y0 = to_inset_y(censor_summary$surv[tick_idx] - inset_censor_tick_half_height),
+            x1 = to_inset_x(censor_summary$time[tick_idx]),
+            y1 = to_inset_y(censor_summary$surv[tick_idx] + inset_censor_tick_half_height),
+            col = curve_col[[i]],
+            lwd = inset_censor_tick_lwd,
+            lend = "butt"
+          )
+        }
+      }
     }
+    clip(par("usr")[[1]], par("usr")[[2]], par("usr")[[3]], par("usr")[[4]])
+    rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], border = "grey25", lwd = 0.8)
+    legend(
+      x = inset_x[[1]] + 0.03 * diff(inset_x),
+      y = inset_y[[1]] + 0.40 * diff(inset_y),
+      legend = display_labels[legend_order],
+      col = curve_col[legend_order],
+      lty = curve_lty[legend_order],
+      lwd = 2,
+      bg = grDevices::adjustcolor("white", alpha.f = 0.78),
+      box.col = NA,
+      y.intersp = 0.95,
+      x.intersp = 0.85,
+      cex = legend_cex,
+      xpd = NA
+    )
+    rect(
+      xleft = inset_x[[1]] + 0.02 * diff(inset_x),
+      ybottom = inset_y[[1]] + 0.06 * diff(inset_y),
+      xright = inset_x[[1]] + 0.34 * diff(inset_x),
+      ytop = inset_y[[1]] + 0.16 * diff(inset_y),
+      col = grDevices::adjustcolor("white", alpha.f = 0.78),
+      border = NA,
+      xpd = NA
+    )
+    text(
+      x = inset_x[[1]] + 0.065 * diff(inset_x),
+      y = inset_y[[1]] + 0.08 * diff(inset_y),
+      labels = logrank_label,
+      adj = c(0, 0),
+      cex = text_cex,
+      xpd = NA
+    )
+    axis_x_ticks <- round(seq(0, floor(x_limit / 365.25), by = 2) * 365.25)
+    axis_x_labels <- as.character(seq(0, floor(x_limit / 365.25), by = 2))
+    axis_y_ticks <- seq(0.9, 1.0, by = 0.05)
+    segments(
+      to_inset_x(axis_x_ticks), inset_y[[1]],
+      to_inset_x(axis_x_ticks), inset_y[[1]] - inset_axis_x_tick_length,
+      lwd = inset_axis_tick_lwd
+    )
+    text(to_inset_x(axis_x_ticks), inset_y[[1]] - 0.040, axis_x_labels, cex = text_cex, xpd = NA)
+    segments(
+      inset_x[[1]], to_inset_y(axis_y_ticks),
+      inset_x[[1]] - inset_axis_y_tick_length, to_inset_y(axis_y_ticks),
+      lwd = inset_axis_tick_lwd
+    )
+    text(
+      inset_x[[1]] - 0.021 * x_limit,
+      to_inset_y(axis_y_ticks),
+      sprintf("%.2f", axis_y_ticks),
+      cex = text_cex,
+      adj = 1,
+      xpd = NA
+    )
+  } else {
+    legend(
+      x = panel_xlim[[1]] + 0.86 * diff(panel_xlim),
+      y = 0.22,
+      legend = display_labels[legend_order],
+      col = curve_col[legend_order],
+      lty = curve_lty[legend_order],
+      lwd = 2,
+      bg = grDevices::adjustcolor("white", alpha.f = 0.78),
+      box.col = NA,
+      y.intersp = 0.95,
+      x.intersp = 0.85,
+      cex = legend_cex,
+      xjust = 1
+    )
+    text(
+      x = panel_xlim[[1]] + 0.22 * diff(panel_xlim),
+      y = 0.09,
+      labels = logrank_label,
+      adj = c(0, 0),
+      cex = text_cex
+    )
   }
-  clip(par("usr")[[1]], par("usr")[[2]], par("usr")[[3]], par("usr")[[4]])
-  rect(inset_x[[1]], inset_y[[1]], inset_x[[2]], inset_y[[2]], border = "grey25", lwd = 0.8)
-  legend(
-    x = inset_x[[1]] + 0.03 * diff(inset_x),
-    y = inset_y[[1]] + 0.40 * diff(inset_y),
-    legend = display_labels[legend_order],
-    col = curve_col[legend_order],
-    lty = curve_lty[legend_order],
-    lwd = 2,
-    bg = grDevices::adjustcolor("white", alpha.f = 0.78),
-    box.col = NA,
-    y.intersp = 0.95,
-    x.intersp = 0.85,
-    cex = legend_cex,
-    xpd = NA
-  )
-  rect(
-    xleft = inset_x[[1]] + 0.02 * diff(inset_x),
-    ybottom = inset_y[[1]] + 0.06 * diff(inset_y),
-    xright = inset_x[[1]] + 0.34 * diff(inset_x),
-    ytop = inset_y[[1]] + 0.16 * diff(inset_y),
-    col = grDevices::adjustcolor("white", alpha.f = 0.78),
-    border = NA,
-    xpd = NA
-  )
-  text(
-    x = inset_x[[1]] + 0.065 * diff(inset_x),
-    y = inset_y[[1]] + 0.08 * diff(inset_y),
-    labels = logrank_label,
-    adj = c(0, 0),
-    cex = text_cex,
-    xpd = NA
-  )
-  axis_x_ticks <- round(seq(0, floor(x_limit / 365.25), by = 2) * 365.25)
-  axis_x_labels <- as.character(seq(0, floor(x_limit / 365.25), by = 2))
-  axis_y_ticks <- seq(0.9, 1.0, by = 0.05)
-  segments(
-    to_inset_x(axis_x_ticks), inset_y[[1]],
-    to_inset_x(axis_x_ticks), inset_y[[1]] - inset_axis_x_tick_length,
-    lwd = inset_axis_tick_lwd
-  )
-  text(to_inset_x(axis_x_ticks), inset_y[[1]] - 0.040, axis_x_labels, cex = text_cex, xpd = NA)
-  segments(
-    inset_x[[1]], to_inset_y(axis_y_ticks),
-    inset_x[[1]] - inset_axis_y_tick_length, to_inset_y(axis_y_ticks),
-    lwd = inset_axis_tick_lwd
-  )
-  text(
-    inset_x[[1]] - 0.021 * x_limit,
-    to_inset_y(axis_y_ticks),
-    sprintf("%.2f", axis_y_ticks),
-    cex = text_cex,
-    adj = 1,
-    xpd = NA
-  )
 
 	  par(mar = c(3.2, left_margin, 0.2, 1.0), las = 1, bty = "n", xaxs = "i", yaxs = "i")
 	  plot(
@@ -713,16 +738,199 @@ fwrite(
   study3_output_path("finegray_primary_device_results.csv")
 )
 
-cif <- with(
-  dt_final,
-  cuminc(
-    t_inapp_shock_or_censor_days,
-    fg_event,
-    group = device_group
-  )
-)
+study3_fit_fg_device_results <- function(data, analysis) {
+  if (!nrow(data)) {
+    stop("Cannot fit Fine-Gray subgroup model on an empty dataset.", call. = FALSE)
+  }
 
-cif_inapp <- cif[grep(" 1$", names(cif))]
+  if (length(unique(as.character(data$device_group))) < 2L) {
+    stop(
+      sprintf(
+        "Cannot fit Fine-Gray subgroup model for '%s'; fewer than two device groups are present.",
+        analysis
+      ),
+      call. = FALSE
+    )
+  }
+
+  X_device <- model.matrix(~ device_group, data = data)[, -1, drop = FALSE]
+  fit_unadjusted <- crr(
+    ftime   = data$t_inapp_shock_or_censor_days,
+    fstatus = data$fg_event,
+    cov1    = X_device
+  )
+
+  X_dataset <- model.matrix(~ device_group + dataset, data = data)[, -1, drop = FALSE]
+  fit_adjusted <- crr(
+    ftime    = data$t_inapp_shock_or_censor_days,
+    fstatus  = data$fg_event,
+    cov1     = X_dataset,
+    cengroup = data$dataset
+  )
+
+  rbindlist(
+    list(
+      study3_extract_crr_device_result(
+        fit = fit_unadjusted,
+        term = "device_groupSingle",
+        model = "original_crr_device_only",
+        dataset_handling = "none",
+        data = data,
+        analysis = analysis
+      ),
+      study3_extract_crr_device_result(
+        fit = fit_adjusted,
+        term = "device_groupSingle",
+        model = "dataset_adjusted_crr",
+        dataset_handling = "dataset fixed covariates + dataset-specific censoring via cengroup",
+        data = data,
+        analysis = analysis
+      )
+    )
+  )
+}
+
+study3_fit_cox_device_results <- function(data, analysis) {
+  if (!nrow(data)) {
+    stop("Cannot fit Cox subgroup model on an empty dataset.", call. = FALSE)
+  }
+
+  if (length(unique(as.character(data$device_group))) < 2L) {
+    stop(
+      sprintf(
+        "Cannot fit Cox subgroup model for '%s'; fewer than two device groups are present.",
+        analysis
+      ),
+      call. = FALSE
+    )
+  }
+
+  fit_unadjusted <- coxph(
+    Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
+    data = data
+  )
+  fit_adjusted <- coxph(
+    Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group + strata(dataset),
+    data = data
+  )
+
+  extract_one <- function(fit, model_label) {
+    s <- summary(fit)
+    term <- "device_groupSingle"
+    term_idx <- match(term, rownames(s$coef))
+    if (is.na(term_idx)) {
+      stop(
+        sprintf(
+          "Term '%s' not found in Cox subgroup model coefficients for '%s'.",
+          term,
+          analysis
+        ),
+        call. = FALSE
+      )
+    }
+
+    data.table(
+      analysis = analysis,
+      model = model_label,
+      term = term,
+      n = s$n,
+      events = s$nevent,
+      HR = s$coef[term_idx, "exp(coef)"],
+      lci_95 = s$conf.int[term_idx, "lower .95"],
+      uci_95 = s$conf.int[term_idx, "upper .95"],
+      p_value = s$coef[term_idx, "Pr(>|z|)"]
+    )
+  }
+
+  rbindlist(
+    list(
+      extract_one(fit_unadjusted, "cox_unadjusted"),
+      extract_one(fit_adjusted, "cox_dataset_adjusted")
+    )
+  )
+}
+
+study3_format_fg_annotation <- function(result_dt, short = TRUE) {
+  format_p <- function(p) {
+    if (is.na(p)) return("NA")
+    if (p < 0.001) return("<0.001")
+    sprintf("%.3f", p)
+  }
+
+  unadjusted <- result_dt[model == "original_crr_device_only"][1]
+  adjusted <- result_dt[model == "dataset_adjusted_crr"][1]
+
+  c(
+    sprintf(
+      "%s: sHR %.2f (%.2f-%.2f), p=%s",
+      if (short) "FG unadj" else "FG unadjusted",
+      unadjusted$sHR,
+      unadjusted$lci_95,
+      unadjusted$uci_95,
+      format_p(unadjusted$p_value)
+    ),
+    sprintf(
+      "%s: sHR %.2f (%.2f-%.2f), p=%s",
+      if (short) "FG adj" else "FG adjusted",
+      adjusted$sHR,
+      adjusted$lci_95,
+      adjusted$uci_95,
+      format_p(adjusted$p_value)
+    )
+  )
+}
+
+study3_format_cox_annotation <- function(result_dt, short = TRUE) {
+  format_p <- function(p) {
+    if (is.na(p)) return("NA")
+    if (p < 0.001) return("<0.001")
+    sprintf("%.3f", p)
+  }
+
+  unadjusted <- result_dt[model == "cox_unadjusted"][1]
+  adjusted <- result_dt[model == "cox_dataset_adjusted"][1]
+
+  c(
+    sprintf(
+      "%s: HR %.2f (%.2f-%.2f), p=%s",
+      if (short) "Cox unadj" else "Cox unadjusted",
+      unadjusted$HR,
+      unadjusted$lci_95,
+      unadjusted$uci_95,
+      format_p(unadjusted$p_value)
+    ),
+    sprintf(
+      "%s: HR %.2f (%.2f-%.2f), p=%s",
+      if (short) "Cox adj" else "Cox adjusted",
+      adjusted$HR,
+      adjusted$lci_95,
+      adjusted$uci_95,
+      format_p(adjusted$p_value)
+    )
+  )
+}
+
+study3_normalize_yes_no <- function(x, var_name) {
+  raw <- trimws(as.character(x))
+  out <- rep(NA_character_, length(raw))
+
+  out[tolower(raw) %in% c("yes", "y", "1", "true")] <- "Yes"
+  out[tolower(raw) %in% c("no", "n", "0", "false")] <- "No"
+
+  unknown_levels <- sort(unique(raw[!is.na(raw) & nzchar(raw) & is.na(out)]))
+  if (length(unknown_levels)) {
+    stop(
+      sprintf(
+        "Unexpected values in %s: %s",
+        var_name,
+        paste(unknown_levels, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+
+  out
+}
 
 study3_cif_curve_data <- function(cif_object, x_limit = 3000) {
   curve_names <- names(cif_object)
@@ -732,7 +940,7 @@ study3_cif_curve_data <- function(cif_object, x_limit = 3000) {
   cif_object <- cif_object[keep]
   device_group <- device_group[keep]
 
-  device_order <- c("Dual", "Single")
+  device_order <- c("Single", "Dual")
   missing_devices <- setdiff(device_order, device_group)
   if (length(missing_devices)) {
     stop(
@@ -771,80 +979,245 @@ study3_cif_curve_data <- function(cif_object, x_limit = 3000) {
   )
 }
 
-study3_draw_cif_figure2 <- function(cif_object, x_limit = 3000) {
-  cif_dt <- study3_cif_curve_data(cif_object, x_limit = x_limit)
+study3_build_figure2_cif_data <- function(data, x_limit = 2200) {
+  if (!"AF_atrial_flutter" %in% names(data)) {
+    stop("Column 'AF_atrial_flutter' not found in Study 3 analysis dataset.", call. = FALSE)
+  }
+
+  plot_data <- copy(data)
+  plot_data[, af_status := study3_normalize_yes_no(AF_atrial_flutter, "AF_atrial_flutter")]
+
+  missing_af_rows <- is.na(plot_data$af_status)
+  if (any(missing_af_rows)) {
+    cat(
+      "Excluding ",
+      sum(missing_af_rows),
+      " row(s) with missing AF_atrial_flutter before Figure 2 plotting.\n",
+      sep = ""
+    )
+    plot_data <- plot_data[!missing_af_rows]
+  }
+
+  af_order <- c("No", "Yes")
+  af_labels <- c(
+    No = "Without atrial fibrillation",
+    Yes = "With atrial fibrillation"
+  )
+  af_analysis_labels <- c(
+    No = "primary_without_af",
+    Yes = "primary_with_af"
+  )
+  annotation_list <- vector("list", length(af_order))
+  names(annotation_list) <- unname(af_labels[af_order])
+
+  cif_panel_dt <- rbindlist(
+    lapply(seq_along(af_order), function(idx) {
+      af_level <- af_order[[idx]]
+      panel_data <- plot_data[af_status == af_level]
+      if (!nrow(panel_data)) {
+        stop(
+          sprintf("Cannot draw Figure 2; no patients available for AF subgroup '%s'.", af_level),
+          call. = FALSE
+        )
+      }
+
+      cif_panel <- with(
+        panel_data,
+        cuminc(
+          t_inapp_shock_or_censor_days,
+          fg_event,
+          group = device_group
+        )
+      )
+
+      panel_curves <- study3_cif_curve_data(
+        cif_object = cif_panel[grep(" 1$", names(cif_panel))],
+        x_limit = x_limit
+      )
+      panel_cox_results <- study3_fit_cox_device_results(
+        data = panel_data,
+        analysis = af_analysis_labels[[af_level]]
+      )
+      panel_fg_results <- study3_fit_fg_device_results(
+        data = panel_data,
+        analysis = af_analysis_labels[[af_level]]
+      )
+      annotation_list[[idx]] <<- c(
+        study3_format_cox_annotation(panel_cox_results, short = TRUE),
+        study3_format_fg_annotation(panel_fg_results, short = TRUE)
+      )
+      panel_curves[, af_status := af_level]
+      panel_curves[, af_panel_label := af_labels[[af_level]]]
+      panel_curves
+    }),
+    use.names = TRUE
+  )
+
+  cif_panel_dt[, af_panel_label := factor(
+    af_panel_label,
+    levels = unname(af_labels[af_order])
+  )]
+
+  list(
+    curves = cif_panel_dt,
+    panel_annotations = annotation_list
+  )
+}
+
+study3_draw_cif_figure2 <- function(data, x_limit = 2200) {
+  figure2_data <- study3_build_figure2_cif_data(data, x_limit = x_limit)
+  cif_dt <- figure2_data$curves
+  panel_annotations <- figure2_data$panel_annotations
+  text_cex <- 1.14
   device_labels <- c(
-    Dual = "Dual-chamber ICD",
-    Single = "Single-chamber ICD"
+    Single = "1-Lead Device",
+    Dual = "2-Lead Device"
   )
   curve_col <- c(
-    Dual = "#003F9E",
-    Single = "#C00000"
+    Single = "#003F9E",
+    Dual = "#C00000"
   )
   curve_lty <- c(
-    Dual = 1,
-    Single = 2
+    Single = 1,
+    Dual = 2
   )
-  x_breaks <- seq(0, x_limit, by = 500)
+  x_axis <- study3_figure1_year_axis(x_limit)
+  x_breaks <- x_axis$days
   y_breaks <- seq(0, 1, by = 0.1)
+  af_panels <- levels(cif_dt$af_panel_label)
+  effect_box_fill <- grDevices::adjustcolor("white", alpha.f = 0.84)
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par), add = TRUE)
 
-  par(mar = c(5.0, 6.2, 1.0, 1.0), las = 1, bty = "l", xaxs = "i", yaxs = "i")
-  plot(
-    NA,
-    xlim = c(0, x_limit),
-    ylim = c(0, 1),
-    axes = FALSE,
-    xlab = "Days since ICD implantation",
-    ylab = "Cumulative incidence of\ninappropriate ICD shock",
-    cex.lab = 1.18
+  par(
+    mfrow = c(1, 2),
+    mar = c(4.2, 1.2, 3.0, 1.0),
+    oma = c(2.2, 5.2, 3.0, 0.6),
+    las = 1,
+    bty = "l",
+    xaxs = "i",
+    yaxs = "i"
   )
-  axis(1, at = x_breaks, cex.axis = 1.05)
-  axis(2, at = y_breaks, labels = sprintf("%.1f", y_breaks), cex.axis = 1.05)
 
-  for (device in c("Dual", "Single")) {
-    d <- cif_dt[device_group == device]
-    lines(
-      d$time_days,
-      d$estimate,
-      type = "s",
-      col = curve_col[[device]],
-      lty = curve_lty[[device]],
-      lwd = 2
+  for (panel_idx in seq_along(af_panels)) {
+    panel_label <- af_panels[[panel_idx]]
+    panel_dt <- cif_dt[af_panel_label == panel_label]
+
+    plot(
+      NA,
+      xlim = c(0, x_limit),
+      ylim = c(0, 1),
+      axes = FALSE,
+      xlab = "",
+      ylab = ""
     )
+
+    axis(1, at = x_breaks, labels = x_axis$labels, cex.axis = 1.05)
+    if (panel_idx == 1L) {
+      axis(2, at = y_breaks, labels = sprintf("%.1f", y_breaks), cex.axis = 1.05)
+    } else {
+      axis(2, at = y_breaks, labels = FALSE, tck = -0.015)
+    }
+
+    for (device in c("Single", "Dual")) {
+      d <- panel_dt[device_group == device]
+      lines(
+        d$time_days,
+        d$estimate,
+        type = "s",
+        col = curve_col[[device]],
+        lty = curve_lty[[device]],
+        lwd = 2
+      )
+    }
+
+    title(main = panel_label, line = 1.0, cex.main = 1.15, font.main = 2)
+
+    if (panel_idx == 1L) {
+      legend(
+        "topleft",
+        legend = unname(device_labels[c("Single", "Dual")]),
+        col = curve_col[c("Single", "Dual")],
+        lty = curve_lty[c("Single", "Dual")],
+        lwd = 2,
+        bty = "n",
+        cex = 1.05,
+        inset = c(0.03, 0.04)
+      )
+    }
+
+    panel_text <- panel_annotations[[panel_label]]
+    if (length(panel_text)) {
+      box_left <- 0.40 * x_limit
+      box_right <- 0.985 * x_limit
+      box_top <- 0.95
+      box_bottom <- 0.64
+      rect(
+        xleft = box_left,
+        ybottom = box_bottom,
+        xright = box_right,
+        ytop = box_top,
+        col = effect_box_fill,
+        border = NA,
+        xpd = NA
+      )
+      text(
+        x = box_left + 0.018 * x_limit,
+        y = c(0.91, 0.84, 0.77, 0.70),
+        labels = panel_text,
+        adj = c(0, 0.5),
+        cex = 0.74,
+        xpd = NA
+      )
+    }
   }
 
-  legend(
-    "topleft",
-    legend = unname(device_labels[c("Dual", "Single")]),
-    col = curve_col[c("Dual", "Single")],
-    lty = curve_lty[c("Dual", "Single")],
-    lwd = 2,
-    bty = "n",
-    cex = 1.12,
-    inset = c(0.03, 0.04)
+  mtext("Years since ICD implantation", side = 1, outer = TRUE, line = -0.30, cex = 1.12)
+  mtext(
+    "Cumulative incidence for inappropriate shock",
+    side = 2,
+    outer = TRUE,
+    line = 2.6,
+    cex = text_cex,
+    las = 0
+  )
+  mtext(
+    "Figure 2. Cumulative Incidence of First Inappropriate ICD Shock by Device Type, Stratified by Atrial Fibrillation",
+    side = 3,
+    outer = TRUE,
+    line = 1.2,
+    cex = 1.15,
+    font = 2
+  )
+  mtext(
+    sprintf("Follow-up truncated at %s days (%.1f years)", format(x_limit, big.mark = ","), x_limit / 365.25),
+    side = 3,
+    outer = TRUE,
+    line = 0.1,
+    cex = 1.02,
+    font = 3,
+    col = "#1E3557"
   )
 }
 
 study3_save_grid(
   draw = function() {
     study3_draw_cif_figure2(
-      cif_object = cif_inapp,
-      x_limit = 3000
+      data = dt_final,
+      x_limit = 2200
     )
   },
   png_file = study3_output_path("figure_cif_inapp_shock_by_device.png"),
   pdf_file = study3_output_path("figure_cif_inapp_shock_by_device.pdf"),
-  png_width = 3000,
-  png_height = 1500,
+  png_width = 3600,
+  png_height = 1900,
   png_res = 300,
-  pdf_width = 10.0,
-  pdf_height = 5.0
+  pdf_width = 12.0,
+  pdf_height = 6.4
 )
 
 study3_draw_cif_figure2(
-  cif_object = cif_inapp,
-  x_limit = 3000
+  data = dt_final,
+  x_limit = 2200
 )

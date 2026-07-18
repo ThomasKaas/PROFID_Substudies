@@ -88,6 +88,39 @@ vars_categorical <- c("Sex","NYHA","AF_atrial_flutter", "Diabetes",
 
 vars_table1  <- c(vars_continuous, vars_categorical)
 
+format_table_p_value <- function(p_value) {
+  if (is.na(p_value)) return("")
+  if (p_value < 0.001) return("<0.001")
+  sprintf("%.3f", p_value)
+}
+
+compute_categorical_pvalues <- function(data, variables, strata_var = "device_group") {
+  rbindlist(
+    lapply(variables, function(v) {
+      sub <- data[!is.na(get(v)) & !is.na(get(strata_var))]
+
+      if (nrow(sub) == 0) {
+        return(data.table(variable = v, p_value = NA_real_, test = NA_character_))
+      }
+
+      tab <- table(sub[[v]], sub[[strata_var]])
+
+      if (any(dim(tab) < 2) || all(tab == 0)) {
+        return(data.table(variable = v, p_value = NA_real_, test = NA_character_))
+      }
+
+      if (any(tab < 5)) {
+        test <- fisher.test(tab)
+        data.table(variable = v, p_value = test$p.value, test = "Fisher exact")
+      } else {
+        test <- chisq.test(tab)
+        data.table(variable = v, p_value = test$p.value, test = "Chi-square")
+      }
+    }),
+    fill = TRUE
+  )
+}
+
 ####### NORMALISE YES/NO FIELDS #######
 yn_keep_na <- function(x){
   x <- tolower(trimws(as.character(x)))
@@ -147,17 +180,86 @@ table1 <- CreateTableOne(
   addOverall = TRUE
 )
 
-print(
+table1_print <- print(
   table1,
   showAllLevels = TRUE,
   quote = FALSE,
-  noSpaces = TRUE
+  noSpaces = TRUE,
+  printToggle = FALSE
+)
+
+table1_categorical_pvalues <- compute_categorical_pvalues(dt_table1, vars_categorical)
+
+if ("p" %in% colnames(table1_print)) {
+  for (i in seq_len(nrow(table1_categorical_pvalues))) {
+    row_name <- paste0(table1_categorical_pvalues$variable[i], " (%)")
+    row_idx <- match(row_name, rownames(table1_print))
+    if (!is.na(row_idx)) {
+      table1_print[row_idx, "p"] <- format_table_p_value(table1_categorical_pvalues$p_value[i])
+    }
+  }
+}
+
+print(table1_print, quote = FALSE)
+
+table1_export <- as.data.table(table1_print, keep.rownames = "Variables")
+
+if ("p" %in% names(table1_export)) {
+  setnames(table1_export, "p", "p-value")
+}
+
+table1_export_cols <- c("Variables", "level", "Overall", "Dual", "Single", "p-value")
+table1_export <- table1_export[, intersect(table1_export_cols, names(table1_export)), with = FALSE]
+
+if ("level" %in% names(table1_export)) {
+  setnames(table1_export, "level", "Level")
+}
+
+for (col in intersect(c("Variables", "Level"), names(table1_export))) {
+  table1_export[
+    is.na(get(col)) | get(col) == "\"\"",
+    (col) := ""
+  ]
+}
+
+if (all(c("Variables", "Level") %in% names(table1_export))) {
+  current_variable <- ""
+  variable_group <- character(nrow(table1_export))
+
+  for (i in seq_len(nrow(table1_export))) {
+    if (nzchar(table1_export$Variables[i])) {
+      current_variable <- table1_export$Variables[i]
+    }
+    variable_group[i] <- current_variable
+  }
+
+  categorical_row_labels <- paste0(vars_categorical, " (%)")
+  table1_export[
+    variable_group %in% categorical_row_labels & Level == "",
+    Level := "Missing"
+  ]
+}
+
+dir.create(study3_output_root(), recursive = TRUE, showWarnings = FALSE)
+fwrite(
+  table1_export,
+  study3_output_path("table1_baseline_by_device.csv"),
+  na = "",
+  quote = FALSE
+)
+fwrite(
+  table1_export,
+  study3_output_path("table1_baseline_by_device.tsv"),
+  sep = "\t",
+  na = "",
+  quote = FALSE
 )
 
 
 ####### COHORT 2: DEVICE COMPARISON / INFERENTIAL ANALYSES
 
 dt_analysis <- dt_desc
+dt_table1_tests <- dt_table1
 
 if (study3_debugging_enabled()) {
   study3_debug_section("First t_followup_days_final assignment comparison")
@@ -178,7 +280,7 @@ if (study3_debugging_enabled()) {
 
 normality_results <- rbindlist(
   lapply(vars_continuous, function(v) {
-    dt_analysis[!is.na(get(v)),
+    dt_table1_tests[!is.na(get(v)),
                 .(
                   variable = v,
                   p_shapiro = if (.N >= 3 & .N <= 5000)
@@ -203,8 +305,8 @@ non_normal_vars
 continuous_tests <- rbindlist(
   lapply(vars_continuous, function(v) {
     
-    x <- dt_analysis[device_group == "Single", get(v)]
-    y <- dt_analysis[device_group == "Dual",   get(v)]
+    x <- dt_table1_tests[device_group == "Single", get(v)]
+    y <- dt_table1_tests[device_group == "Dual",   get(v)]
     
     if (v %in% non_normal_vars) {
       test <- wilcox.test(x, y)
@@ -232,7 +334,7 @@ continuous_tests
 categorical_tests <- rbindlist(
   lapply(vars_categorical, function(v) {
     
-    sub <- dt_analysis[!is.na(get(v)) & !is.na(device_group)]
+    sub <- dt_table1_tests[!is.na(get(v)) & !is.na(device_group)]
     
     # If after filtering there is no data, skip
     if (nrow(sub) == 0) {

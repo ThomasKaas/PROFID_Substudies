@@ -75,6 +75,7 @@ pipeline <- data.frame(
     "km_fine_gray",
     "secondary",
     "sensitivity_180d",
+    "figure3",
     "mice"
   ),
   stage = c(
@@ -82,6 +83,7 @@ pipeline <- data.frame(
     "descriptive",
     rep("modeling", 3),
     "sensitivity",
+    "modeling",
     "imputation"
   ),
   script = c(
@@ -96,6 +98,7 @@ pipeline <- data.frame(
     "Study3/09_Kaplan Maier and Fine Gray.R",
     "Study3/10_secondary analysis.R",
     "Study3/11_sensitivty analysis (180 days).R",
+    "Study3/13_Figure3_forest_plot.R",
     "Study3/12_MICE.R"
   ),
   label = c(
@@ -110,6 +113,7 @@ pipeline <- data.frame(
     "Run Kaplan-Meier and Fine-Gray analyses",
     "Run secondary analyses",
     "Run 180-day sensitivity analyses",
+    "Create Figure 3 robustness forest plot",
     "Run MICE sensitivity analysis"
   ),
   stringsAsFactors = FALSE
