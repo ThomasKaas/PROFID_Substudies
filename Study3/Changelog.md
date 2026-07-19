@@ -37,9 +37,9 @@ The most consequential analytical changes are:
    sensitivity analyses.
 6. Inappropriate-shock event derivation was centralized and persisted across
    the pipeline.
-7. The 180-day sensitivity cohort is now restricted using analyzed endpoint
-   time rather than total follow-up, excluding early inappropriate shocks that
-   were previously retained.
+7. The 180-day sensitivity cohort is restricted using total follow-up, so
+   early inappropriate shocks remain eligible when overall follow-up is at
+   least 180 days.
 
 The earlier statement that no statistical logic, filtering rule, endpoint
 classification, or transformation changed applied to the initial HPC port, but
@@ -61,6 +61,7 @@ material preprocessing and analysis-inclusion changes.
 | 2026-06-07 | `b790195` | Date preprocessing | Replaced Israel date-parsing logic | Supports more formats and stops forced conversion of pre-2000 dates |
 | 2026-06-07 | `b790195` | Survival analysis | Added positive-follow-up exclusions to secondary Cox analyses and corrected primary Fine-Gray death coding | Changes secondary-model populations and competing-event counts |
 | 2026-06-09 | `working tree` | Sensitivity cohort definition | Corrected the 180-day sensitivity restriction to use analyzed endpoint time | Excludes early inappropriate shocks that had total follow-up >= 180 days but event time < 180 days |
+| 2026-07-19 | `working tree` | Sensitivity cohort definition | Restored the minimum-follow-up restriction | Selects on total follow-up (`t_followup_days_final >= 180`) rather than endpoint time; early inappropriate shocks with sufficient total follow-up are retained |
 
 ## 1. Inappropriate-Shock Event Derivation Centralized and Persisted
 
@@ -355,10 +356,11 @@ Local verification against `study3_analysis_final.rds` showed:
 
 ### Impact
 
-This is a substantive cohort-definition correction in the 180-day sensitivity
-analysis. It changes the analyzed population and event count so that the
-sensitivity restriction now matches the manuscript statement that patients must
-have at least 180 days before the analyzed endpoint.
+This was a substantive cohort-definition change. It was superseded on
+2026-07-19: the scientific definition is a minimum of 180 days of total
+follow-up, not a requirement that the inappropriate-shock endpoint occur on or
+after day 180. The current implementation therefore again uses
+`t_followup_days_final >= 180`.
 
 ---
 

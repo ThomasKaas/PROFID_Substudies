@@ -21,7 +21,6 @@ min_fu_days <- 180
 
 # QC:  excluded COUNTS
 dt_final[, fu_lt_6mo := t_followup_days_final < min_fu_days]
-dt_final[, endpoint_lt_6mo := t_inapp_shock_or_censor_days < min_fu_days]
 dt_final[, early_inapp_shock := event_inapp_shock == 1L &
   !is.na(days_to_inapp_shock) &
   days_to_inapp_shock < min_fu_days]
@@ -29,19 +28,19 @@ cat("\n--- SAP 6-month filter QC ---\n")
 print(dt_final[, .(
   n_total = .N,
   n_lt_6mo_followup = sum(fu_lt_6mo, na.rm = TRUE),
-  n_lt_6mo_endpoint = sum(endpoint_lt_6mo, na.rm = TRUE),
-  pct_lt_6mo_endpoint = round(100 * mean(endpoint_lt_6mo, na.rm = TRUE), 2),
+  pct_lt_6mo_followup = round(100 * mean(fu_lt_6mo, na.rm = TRUE), 2),
   events_total = sum(event_inapp_shock, na.rm = TRUE),
   shock_cases_excluded_by_followup = sum(event_inapp_shock == 1L & fu_lt_6mo, na.rm = TRUE),
   shock_cases_with_actual_shock_before_180d = sum(early_inapp_shock, na.rm = TRUE),
-  shock_cases_excluded_by_endpoint_time = sum(event_inapp_shock == 1L & endpoint_lt_6mo, na.rm = TRUE),
-  shock_cases_missed_by_followup_rule = sum(early_inapp_shock & !fu_lt_6mo, na.rm = TRUE)
+  early_shock_cases_retained_with_ge180d_followup = sum(early_inapp_shock & !fu_lt_6mo, na.rm = TRUE)
 )])
 
-# Sensitivity cohort: >= 180 days before analyzed endpoint
+# Sensitivity cohort: >= 180 days of total follow-up.  Early inappropriate
+# shocks are retained when the patient's overall follow-up meets this threshold.
 dt_sens_6mo <- dt_final[
-  !is.na(t_inapp_shock_or_censor_days) &
-    t_inapp_shock_or_censor_days >= min_fu_days
+  !is.na(t_followup_days_final) &
+    is.finite(t_followup_days_final) &
+    t_followup_days_final >= min_fu_days
 ]
 
 cat("\n--- Sensitivity cohort size (>=180d) ---\n")

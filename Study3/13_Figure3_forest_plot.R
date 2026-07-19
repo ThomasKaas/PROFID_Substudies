@@ -167,7 +167,7 @@ results[[length(results) + 1L]] <- fit_fine_gray(
   "Fine-Gray model, death as competing event", 3L
 )
 
-dt_180d <- dt_primary[t_inapp_shock_or_censor_days >= 180]
+dt_180d <- dt_primary[t_followup_days_final >= 180]
 dt_180d[, dataset := droplevels(dataset)]
 results[[length(results) + 1L]] <- fit_fine_gray(
   dt_180d, "Competing-risk analyses",

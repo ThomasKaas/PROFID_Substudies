@@ -384,7 +384,7 @@ categorical_tests
 
 ####### FOLLOW-UP SUMMARY (YEARS) #######
 
-followup_summary <- dt_analysis[
+followup_summary <- dt_table1[
   ,
   .(
     n = .N,
@@ -398,7 +398,7 @@ followup_summary
 
 ####### MISSINGNESS BY DEVICE GROUP (%) #######
 
-missing_by_group <- dt_analysis[
+missing_by_group <- dt_table1[
   ,
   lapply(.SD, function(x) round(mean(is.na(x)) * 100, 2)),
   by = device_group,
@@ -458,11 +458,13 @@ if (study3_debugging_enabled()) {
 
 table(dt_analysis$Inapp_ATP)
 
-########## DEFINE TABLE 2 DATASET (NO FOLLOW-UP FILTER) ##########
+########## DEFINE TABLE 2 DATASET (PRIMARY ANALYSIS COHORT) ##########
 
-dt_table2 <- dt_analysis[
-  dataset %in% c("EUCERT", "HELIOS", "PROSE", "ISRAEL")
-]
+# Use exactly the same eligible patients as Table 1 and the primary
+# time-to-event analyses (N = 3,070), rather than the pre-filter descriptive
+# cohort.  Keep this object separate so downstream data preparation remains
+# explicit.
+dt_table2 <- copy(dt_table1)
 
 ########## CREATE new_SCD FROM Status (0=alive/censored, 1=SCD, 2=non-SCD) ##########
 dt_table2[, new_Status3 := NA_character_]
@@ -517,10 +519,42 @@ event_vars <- intersect(
 vars_table2 <- c(time_vars, event_vars)
 ########## TABLE 2 — DESCRIPTIVES BY DEVICE GROUP ##########
 
+# Keep the primary-analysis dataset unchanged for all downstream summaries
+# (including incidence rates).  For the three event-time rows in Table 2 only,
+# retain a time value when the corresponding event was recorded.  The
+# inappropriate-shock summary uses the same analysis time as the primary Cox
+# model, so all 72 primary-endpoint events are retained.
+dt_table2_summary <- copy(dt_table2)
+
+if (all(c(
+  "days_to_inapp_shock", "event_inapp_shock",
+  "t_inapp_shock_or_censor_days"
+) %in% names(dt_table2_summary))) {
+  dt_table2_summary[, days_to_inapp_shock := fifelse(
+    event_inapp_shock == 1L,
+    as.numeric(t_inapp_shock_or_censor_days),
+    NA_real_
+  )]
+}
+
+if (all(c("days_to_app_shock", "app_shock_flag") %in% names(dt_table2_summary))) {
+  dt_table2_summary[
+    app_shock_flag != "Yes",
+    days_to_app_shock := NA_real_
+  ]
+}
+
+if (all(c("days_to_death", "death_flag") %in% names(dt_table2_summary))) {
+  dt_table2_summary[
+    death_flag != "Yes",
+    days_to_death := NA_real_
+  ]
+}
+
 table2 <- CreateTableOne(
   vars        = vars_table2,
   strata      = "device_group",
-  data        = dt_table2,
+  data        = dt_table2_summary,
   factorVars  = event_vars,
   includeNA  = TRUE,
   addOverall = TRUE
