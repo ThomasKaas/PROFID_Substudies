@@ -180,7 +180,7 @@ cat("STEP 3.5) Assess missingness (train + test)...\n")
 
 
 
-DIR_FIG <- study1_derived_path("Imputed_data", "Figures")
+DIR_FIG <- study1_output_path()
 
 
 
