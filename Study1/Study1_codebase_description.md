@@ -1,717 +1,727 @@
 # Study 1 Codebase Description
 
-This document describes the `Study1/` codebase in the `PROFID_Substudies` workspace. The codebase is an R-based analysis pipeline for an ICD cohort assembled from four registries: EU-CERT-ICD, HELIOS, ISRAEL-ICD, and PROSE-ICD. The clinical focus is the association between first inappropriate ICD shock or therapy (`FIS`) and all-cause mortality.
+This document describes the `Study1/` codebase as it exists in this repository. The folder contains an R-based workflow for preparing, harmonising, merging, describing, imputing, and modelling Study 1 data for the PROFID ICD substudies.
 
-The scripts are not packaged as an R project. They are ordered as standalone scripts with hard-coded local/network paths, mainly on `T:/`, `S:/`, and `//Charite.de/...`. The intended workflow is therefore sequential execution in an environment where those data drives and source files are mounted.
+The scientific focus is the association between first inappropriate ICD shock or therapy (FIS) and all-cause mortality in an ICD cohort assembled from four registries: EU-CERT-ICD, HELIOS, ISRAEL-ICD, and PROSE-ICD. The primary analysis is a time-dependent Cox model with multiple imputation; landmark Cox and Fine-Gray competing-risk analyses serve as sensitivity analyses.
 
-## High-Level Purpose
+## Folder Contents
 
-The Study 1 pipeline:
+Top-level files in `Study1/` are organised as numbered R scripts plus a preprocessing subdirectory:
 
-1. Preprocesses each source registry into a PROFID common data model-like structure.
-2. Merges the source registries into one ICD cohort.
-3. Standardises variables for descriptive and modelling use.
-4. Applies transformations to skewed numeric variables and creates SAP-defined age groups.
-5. Applies final cohort cleaning rules for mortality follow-up and first inappropriate shock timing.
-6. Produces cohort derivation, incidence, power, baseline characteristics, and missingness tables.
-7. Generates Kaplan-Meier descriptive figures.
-8. Performs multiple imputation by chained equations.
-9. Fits the primary time-dependent Cox model for all-cause mortality.
-10. Runs landmark Cox sensitivity analyses.
-11. Runs Fine-Gray landmark competing-risk sensitivity analyses.
+| File | Purpose |
+| --- | --- |
+| `preprocessing_dataset_scripts/eucert_preprocessing.R` | Processes EU-CERT-ICD registry data into a CDM-ready dataset. |
+| `preprocessing_dataset_scripts/helios_processing.R` | Processes HELIOS data from an 11-sheet Excel workbook into a CDM-ready dataset. |
+| `preprocessing_dataset_scripts/israel_processing.R` | Processes ISRAEL-ICD data into a CDM-ready dataset. |
+| `preprocessing_dataset_scripts/prose_processing.R` | Processes PROSE-ICD data into a CDM-ready dataset. |
+| `preprocessing_dataset_scripts/Final_merge_script.R` | Harmonises endpoint columns and IDs, stacks the four registries, and merges them into the ICD master cohort. |
+| `preprocessing_dataset_scripts/Variables_overview.R` | Documentation-only `gt` table of endpoint construction by registry. |
+| `1.Preliminary analysis.R` | Standardises the merged cohort: inadmissible-value rules, <=40-day baseline rule, factor and `bin_*` creation. |
+| `2.Variable_transformation.R` | Log-transforms right-skewed numeric variables and creates SAP age groups. |
+| `3.data_cleaning_incidence_power_calc.R` | Defines the final analytic cohort; produces cohort derivation, incidence, exposure, and power tables. |
+| `4.Table 1 and table S3.R` | Builds Table 1 baseline characteristics and the supplementary missing-data table. |
+| `5.KM1.R` | Descriptive Kaplan-Meier cumulative incidence of time to first inappropriate shock. |
+| `6.KM2.R` | Descriptive Kaplan-Meier overall survival by ever/never inappropriate shock. |
+| `7.mice_full_cohort.R` | Runs full-cohort MICE imputation (m = 20) with missingness audits. |
+| `8.full_cohort_cox_model_and_development.R` | Develops and fits the primary time-dependent Cox model, diagnostics, interactions, and subgroups. |
+| `9.Landmark_analysis.R` | Landmark Cox sensitivity analyses at 6, 12, and 24 months. |
+| `10.Fine_gray.R` | Landmark Fine-Gray competing-risk sensitivity analyses at 6, 12, and 24 months. |
+| `master_run.R` | Canonical sequential runner with stage and step selection. |
+| `run_study1.sh` | Slurm submission wrapper that forwards runner options. |
+| `study1_paths.R` | Shared path, graphics-device, and plot-saving helpers. |
+| `Dataflow.md` | Reconstructed data-flow note with pipeline diagram. |
+| `Study1_codebase_description.md` | This document. |
 
-## Directory Contents
+Raw data are kept outside the repository. Inputs resolve below the data root given by `PROFID_DATA_ROOT` (default `/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data`); derived intermediates resolve below `PROFID_STUDY1_DERIVED_ROOT` (default `<data root>/derived/Study1`); tables and figures are written to `PROFID_STUDY1_OUTPUT_ROOT` (default `<repo>/Study1/outputs`).
 
-`Study1/` contains ten numbered analysis scripts and a preprocessing subdirectory:
+## High-Level Workflow
 
-| File | Role |
-|---|---|
-| `1.Preliminary analysis.R` | Loads merged ICD cohort, validates and standardises variables, applies baseline rules, saves standardised data. |
-| `2.Variable_transformation.R` | Detects right-skewed numeric variables, creates `*_log1p` transforms, creates SAP age groups. |
-| `3.data_cleaning_incidence_power_calc.R` | Applies final analytic cohort rules, saves master clean dataset, creates cohort derivation, incidence, exposure, and power tables. |
-| `4.Table 1 and table S3.R` | Builds Table 1 baseline characteristics and supplementary missing data table. |
-| `5.KM1.R` | Creates descriptive Kaplan-Meier cumulative incidence curve for time to first inappropriate shock. |
-| `6.KM2.R` | Creates descriptive Kaplan-Meier survival curves by ever/never inappropriate shock. |
-| `7.mice_full_cohort.R` | Builds and saves full-cohort MICE imputations and missingness audit outputs. |
-| `8.full_cohort_cox_model_and_development.R` | Develops and fits the primary time-dependent Cox model, diagnostics, interactions, and subgroup outputs. |
-| `9.Landmark_analysis.R` | Runs landmark Cox sensitivity analyses at 6, 12, and 24 months. |
-| `10.Fine_gray.R` | Runs landmark Fine-Gray competing-risk sensitivity analyses at 6, 12, and 24 months. |
-| `preprocessing_dataset_scripts/` | Source-registry preprocessing, registry merge, and variable construction overview. |
+The pipeline is:
 
-## Data Lineage
+1. Process each contributing registry into a common-data-model-ready dataset:
+   - EU-CERT-ICD (`CERT`)
+   - HELIOS (`HELS`)
+   - ISRAEL-ICD (`ISRL`)
+   - PROSE-ICD (`PRSE`)
+2. Construct the harmonised endpoint variables per registry: `Status_death`, `Time_death_days`, `t_followup_days`, `Status_FIS`, `Time_FIS_days`.
+3. Apply registry-specific inclusion/exclusion rules (adult age; ischemic-only, CRT-D, overlap-centre, and co-enrolment exclusions where configured).
+4. Stack the four registries and merge them into the ICD master cohort `ICD.csv` by normalised ID.
+5. Standardise the merged cohort (inadmissible values to NA, <=40-day baseline rule, factors, `bin_*` indicators).
+6. Transform skewed numerics (`log1p`) and create SAP age groups.
+7. Apply final outcome/exposure cleaning rules to define the master analytic cohort.
+8. Generate descriptive tables (Table 1, missingness, incidence, power) and Kaplan-Meier figures.
+9. Run full-cohort MICE imputation.
+10. Fit the primary time-dependent Cox model for all-cause mortality.
+11. Run landmark Cox and Fine-Gray competing-risk sensitivity analyses.
 
-The intended data flow is:
+The core data products are:
 
-```text
-Raw registry files
-  -> preprocessing_dataset_scripts/*_processing.R
-  -> processed registry RDS/CSV files
-  -> preprocessing_dataset_scripts/Final_merge_script.R
-  -> T:/FINAL ICD COHORT/icd_merged1.csv/.rds
-  -> 1.Preliminary analysis.R
-  -> T:/FINAL ICD COHORT/standardised_data1.csv/.rds
-  -> 2.Variable_transformation.R
-  -> T:/FINAL ICD COHORT/Transformed_data1.rds
-  -> 3.data_cleaning_incidence_power_calc.R
-  -> T:/Study_1/master_clean_dataset1.rds
-  -> descriptive tables, KM figures, MICE, Cox, landmark, and Fine-Gray analyses
+- `derived/Study1/FINAL_ICD_COHORT/icd_merged1.rds` (merged cohort)
+- `derived/Study1/master_clean_dataset1.rds` (final analytic cohort)
+- `derived/Study1/Imputed_data/mice_full_object1.rds` (20 imputations)
+
+## Master Runner And Execution Modes
+
+`Study1/master_run.R` runs the pipeline scripts in a fixed order. Each script is executed via `sys.source()` in its own environment, into which the runner injects shims: `install.packages` is replaced by an installer that targets the user library (with a special case installing `gt` 0.7.0 from the CRAN archive), and `library` is replaced by a loader that installs missing packages on demand, expands `tidyverse` into its core packages, and silently skips the optional `survminer`/`ggsurvplot` packages.
+
+The runner supports:
+
+```bash
+Rscript Study1/master_run.R                    # full pipeline
+Rscript Study1/master_run.R --dry-run          # print selected scripts only
+Rscript Study1/master_run.R --stage analysis   # one stage only
+Rscript Study1/master_run.R --from 3_clean --to 8_primary_cox
+Rscript Study1/master_run.R --only 7_mice,8_primary_cox
+Rscript Study1/master_run.R --skip-optional    # skip QC/descriptive steps
+Rscript Study1/master_run.R --continue-on-error
 ```
 
-The downstream analysis scripts rely on `T:/Study_1/master_clean_dataset1.rds` and, for imputed modelling, `T:/Study_1/Imputed_data/mice_full_object1.rds`.
+Stages are `preprocessing`, `core` (scripts 1-3), `descriptive` (scripts 4-6), `imputation` (script 7), `modeling` (script 8), `sensitivity` (scripts 9-10), and the umbrella stages `analysis` (everything after the merge) and `all`. Step IDs in default order:
 
-## Preprocessing Layer
+```text
+preprocess_eucert, preprocess_helios, preprocess_israel, preprocess_prose,
+variables_overview (optional), merge,
+1_preliminary, 2_transform, 3_clean,
+4_table1 (optional), 5_km1 (optional), 6_km2 (optional),
+7_mice, 8_primary_cox, 9_landmark, 10_fine_gray
+```
 
-### `eucert_preprocessing.R`
+The runner stops at the first failing script unless `--continue-on-error` is given, and reports per-step timings and a failure summary at the end. Run `Rscript Study1/master_run.R --help` for the complete option list.
 
-This script processes EU-CERT-ICD registry data into a CDM-ready dataset.
+The Slurm wrapper:
 
-Main steps:
+```bash
+./Study1/run_study1.sh                 # submits via sbatch, forwards all options
+./Study1/run_study1.sh --dry-run
+```
 
-- Loads a raw patient-level CSV.
-- Loads a data dictionary and a common data model CSV.
-- Converts dictionary-marked date variables.
-- Restricts to ischemic diagnosis where `pat_diag_type` exists.
-- Excludes patients younger than 18.
-- Optionally excludes CRT-D patients with `EXCLUDE_CRT <- TRUE`.
-- Excludes the Karolinska overlap centre if `ctr_name` exists.
-- Checks follow-up consistency by comparing date-derived follow-up with `length_fu_mortality`.
-- Constructs:
-  - `Status_death`: `death == yes` gives 1, `death == no` gives 0.
-  - `Time_death`: `length_fu_mortality`.
-  - `Status_FIS`: `inap_shock == yes` gives 1, `inap_shock == no` gives 0.
-  - `Time_FIS`: `length_fu_inap_shock`.
-- Reclassifies heart transplant cases as non-deaths when `heart_transplant == yes`.
-- Adds `DB <- "CERT"` and `ID_f <- paste0(DB, "-", ID)`.
-- Saves `eu_cert_icd_cdm_ready.rds`, CSV, QC summary, and basic summary statistics.
+It self-submits with `sbatch` when run outside a Slurm allocation, loads `R/4.5.0`, writes `Study1/outputs/log_run_<timestamp>.log`, and sends begin/end/fail mail notifications.
 
-### `helios_processing.R`
+## Shared Path And Graphics Helpers
 
-This script processes HELIOS data from a multi-sheet Excel workbook.
+All scripts source `Study1/study1_paths.R` through a fallback chain (`Study1/study1_paths.R` -> `study1_paths.R` -> `../study1_paths.R`), so scripts work from the repository root, `Study1/`, or `Study1/preprocessing_dataset_scripts/`.
 
-Main steps:
+The central helpers are:
 
-- Reads and merges multiple sheets by `PAT_INDEX`.
-- Uses the dictionary to rename raw variables once.
-- Excludes patients younger than 18.
-- Optional CRT exclusion is available but set to `FALSE`.
-- Constructs all-cause mortality:
-  - `Status_death` from `Status_death_cat`.
-  - `Time_death_days` from `DAYS2DEATH.ICD` for deaths and `DAYS2LastFU.ICD` for censored patients.
-  - `t_followup_days <- Time_death_days`.
-- Constructs exposure:
-  - `Status_FIS` from `inappropriate_shock`.
-  - `Time_FIS_days` from `DAYS2_inappropriate_shock.ICD` for exposed patients.
-- Adds `DB <- "HELS"` and `ID_f <- paste0(DB, "-", ID)`.
-- Saves `helios_cdm_ready.rds`, CSV, QC summary, and basic summary statistics.
+- `profid_data_root()`, `profid_data_path(...)`, `profid_dataset_path(...)`, `profid_transfer_path(...)` for raw inputs under the data root.
+- `study1_derived_path(...)` for derived intermediates (registry RDS files, the merged cohort, the master clean dataset, imputation outputs).
+- `study1_output_path(...)` for tables and figures under `Study1/outputs/`.
+- `study1_save_plot()` and `study1_save_grid()` for PNG/PDF export with headless device fallbacks (ragg -> cairo -> ghostscript bitmap; cairo_pdf -> pdf), plus headless cairo configuration on Linux.
 
-### `israel_processing.R`
+Notable detail:
 
-This script processes ISRAEL-ICD data.
+- `study1_output_path()` only honours the last path component when it carries a file extension; directory-like components are silently dropped. Arguments such as `study1_output_path("Supplementary_data", "Primary")` therefore resolve to the output root itself, and all table/figure outputs of scripts 3-10 land flat in `Study1/outputs/` rather than in the subfolder structure the arguments suggest.
 
-Main steps:
+## R Package Dependencies
 
-- Loads raw CSV and dictionary.
-- Renames all variables according to the dictionary.
-- Optionally parses date columns based on dictionary data types.
-- Excludes age `<18` when `EXCLUDE_AGE_LT18 <- TRUE`.
-- Optional CRT exclusion is available but set to `FALSE`.
-- Handles deaths after last follow-up by aligning `Alive_last_FU_days` with `Alive_total_days` for deceased patients.
-- Constructs:
-  - `Status_death`: `Status_last == "DIED"` gives 1, otherwise 0.
-  - `Time_death_days` and `t_followup_days`: `Alive_last_FU_days`.
-  - `Status_FIS`: `Inapp_shock_1st == "YES"` gives 1, `NO` gives 0.
-  - `Time_FIS_days`: `Inapp_shock_days` for exposed and `Alive_last_FU_days` for unexposed.
-- Reclassifies FIS events after follow-up as unexposed and censors their FIS time at follow-up.
-- Adds `DB <- "ISRL"` and `ID_f <- paste0(DB, "_", ID)`.
-- Saves processed RDS/CSV, QC summary, and basic summary statistics.
+Across the codebase, the scripts use:
 
-### `prose_processing.R`
+- `tidyverse` (expanded to core packages by the runner shim)
+- `data.table`
+- `readxl`
+- `openxlsx`
+- `survival`
+- `mice`
+- `naniar`
+- `VIM`
+- `gt` (pinned to 0.7.0 from the CRAN archive by the runner)
+- `ggplot2`, `grid`, `gridExtra`, `patchwork`, `scales`
+- `cmprsk`
+- `broom`
+- `haven`, `stringr`
 
-This script processes PROSE-ICD data.
+Many scripts still contain unconditional `install.packages()` calls; when run through `master_run.R` these are intercepted by the runner's shim. There is no project-level dependency lockfile such as `renv.lock`.
+
+## Source-Specific Preprocessing Scripts
+
+Each preprocessing script reads its raw registry data, a registry data dictionary, and a common data model CSV, and writes a CDM-ready RDS/CSV pair plus QC outputs under `derived/Study1/<REGISTRY>/`. All times are days from ICD implantation.
+
+### `eucert_preprocessing.R` (`DB = "CERT"`)
+
+Inputs:
+
+- `datasets/local/eu-cert-icd/data/original/registry_data_eu-cert-icd_selection_161019-Data-sheet.csv`
+- `datasets/local/eu-cert-icd/data/dictionary/eu-cert-icd-data-dictionary-raw.xlsx` (used only to identify date columns)
+- `datasets/cdm/profid-common-data-model.csv` (shared CDM copy)
 
 Main steps:
 
-- Loads raw PROSE data, a co-enrollment ID file, a dictionary, and CDM.
-- Renames variables using the dictionary.
-- Excludes age `<18`.
-- Excludes CRT patients by keeping only single- or dual-chamber ICD types.
-- Removes co-enrolled patients using the join ID file.
-- Defines follow-up as the maximum available time across `Death_days`, `days_to_app_shock`, and `t_inappshock`.
-- Constructs:
-  - `Status_death`: `Death_status == "Yes"` gives 1, `No` gives 0.
-  - `Time_death`: `Death_days`.
-  - `Status_FIS`: `inappshock == "Yes"` gives 1, `No` gives 0.
-  - Missing shock information with available death follow-up is assumed `No`.
-  - `Time_inapp`: `t_inappshock` for exposed and `Death_days` for unexposed.
-- Adds `DB <- "PRSE"` and `ID_f <- paste0(DB, "-", ID)`.
-- Saves `prose_cdm_ready.rds`, CSV, QC summary, and basic summary statistics.
+1. Reads the registry CSV with `fread()`.
+2. Restricts to ischemic diagnoses (`pat_diag_type == "ischemic"`).
+3. Excludes patients younger than 18.
+4. Excludes CRT-D devices (`EXCLUDE_CRT <- TRUE`).
+5. Excludes the Karolinska overlap centre (`ctr_name == "Karolinska Institute Stockholm"`).
+6. QC-compares date-derived follow-up (`lastfu_date - icd_implant_date`, kept as `fu_days_from_dates`) against `length_fu_mortality`; discrepancies over 7 days are flagged only.
+7. Constructs endpoints:
+   - `Status_death`: `death` yes/no; deaths with `heart_transplant == "yes"` are reclassified as censored.
+   - `Time_death`: `length_fu_mortality`.
+   - `Status_FIS`: `inap_shock` yes/no.
+   - `Time_FIS`: `length_fu_inap_shock`.
+8. FIS/death events after last follow-up are flagged, not corrected.
+9. Adds `DB = "CERT"` and `ID_f = "CERT-<ID>"` (hyphenated).
+10. Saves `EUCID/eu_cert_icd_cdm_ready.rds` and `.csv`, a QC summary, and basic summary statistics.
+
+Notable detail:
+
+- Despite the header comment, no dictionary-driven renaming happens; raw names are kept and intersected with the CDM at the end.
+
+### `helios_processing.R` (`DB = "HELS"`)
+
+Inputs:
+
+- `datasets/local/helios-rdb/data/original/Final_delivery.2021-05-20._Ali EDxlsx.xlsx` — 11 sheets: `target_pop`, `Baseline Characteristics`, `Past Medical History (ICD10)`, `Past Medical History (OPS)`, `Medication (ATC)`, `Lab Data`, `ECG`, `ICD queries`, `Outcome`, `CMR-Scar and GZ`, `Imaging`
+- `datasets/local/helios-rdb/data/dictionary/helios-data-dictionary-raw.csv`
+
+Main steps:
+
+1. Reads all 11 sheets and outer-merges them by `PAT_INDEX` (each sheet asserted unique per patient; for multi-row Imaging the first row is kept).
+2. Renames once via the dictionary (`original_name` -> `new_name`).
+3. Excludes patients younger than 18; CRT exclusion block present but disabled.
+4. Constructs endpoints:
+   - `Status_death` from `Status_death_cat` yes/no.
+   - `Time_death_days`: `DAYS2DEATH.ICD` for deaths, `DAYS2LastFU.ICD` for censored patients.
+   - `t_followup_days = Time_death_days`.
+   - `Status_FIS` from `inappropriate_shock`.
+   - `Time_FIS_days`: `DAYS2_inappropriate_shock.ICD` for exposed patients.
+5. Negative times set to NA; event-after-follow-up flagged only.
+6. Adds `DB = "HELS"` and `ID_f = "HELS-<ID>"` (hyphenated).
+7. Saves `HELIOS/helios_cdm_ready.rds` and `.csv`, a QC summary, and basic summary statistics.
+
+Notable detail:
+
+- The censored-FIS-time assignment writes to a stray `Time_FIS` column instead of `Time_FIS_days`, so censored FIS times stay NA for HELIOS; the master cleaning rules (E1/E6) later backfill them from `Time_death_days`.
+
+### `israel_processing.R` (`DB = "ISRL"`)
+
+Inputs:
+
+- `datasets/local/israeli-icd/data/original/ICDALL_20170630.csv`
+- `datasets/local/israeli-icd/data/dictionary/israeli-icd-data-dictionary-raw-v3.xlsx`
+
+Main steps:
+
+1. Reads the CSV with `fread()` (several NA spellings honoured).
+2. Strict dictionary rename: requires the data columns to match the dictionary's `original_name` column exactly, in order.
+3. Optional dictionary-driven date parsing.
+4. Excludes patients younger than 18; CRT exclusion block present but disabled.
+5. For deceased patients, aligns `Alive_last_FU_days` to `Alive_total_days` when death occurred after last follow-up (an actual correction, with assertion).
+6. Constructs endpoints:
+   - `Status_death`: 1 iff `Status_last == "DIED"`, else 0 (never NA).
+   - `Time_death_days = t_followup_days = Alive_last_FU_days` (post-correction).
+   - `Status_FIS`: `Inapp_shock_1st` YES/NO.
+   - `Time_FIS_days`: `Inapp_shock_days` for exposed, follow-up otherwise.
+7. Actively reclassifies FIS occurring after follow-up as unexposed and censors FIS time at follow-up.
+8. Adds `DB = "ISRL"` and `ID_f = "ISRL_<ID>"` (underscore, unlike the other registries).
+9. Saves `ISRAEL/processed-isrl-common-data-model.rds`, `processed-ISRAEL-common-data-model.csv`, a QC CSV, and basic summaries.
+
+### `prose_processing.R` (`DB = "PRSE"`)
+
+Inputs:
+
+- `datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_hopkins_prose_study.csv`
+- `datasets/local/prose-icd/data/original/FinaltoPROFID_PROSEonlysent_coenrolled.csv` (co-enrolment join file)
+- `datasets/local/prose-icd/data/dictionary/prose-only-data-dictionary-raw-v1.xlsx`
+
+Main steps:
+
+1. Reads the raw CSV and renames via the dictionary.
+2. Excludes patients younger than 18.
+3. Excludes CRT patients (`EXCLUDE_CRT <- TRUE`): keeps only `ICD_type` `SINGLE - Single` and `DUAL - Dual`.
+4. Removes co-enrolled LVSCD patients via the join file.
+5. Because PROSE has no calendar follow-up date, defines `t_followup_days` as the maximum of `Death_days`, `days_to_app_shock`, and `t_inappshock` (all-missing converted from `-Inf` to NA).
+6. Constructs endpoints:
+   - `Status_death`: `Death_status` Yes/No.
+   - `Time_death`: `Death_days`.
+   - `Status_FIS`: `inappshock` Yes/No; missing shock information with available death follow-up is assumed `No`.
+   - `Time_inapp`: `t_inappshock` for exposed, `Death_days` for unexposed.
+7. FIS after death is flagged only.
+8. Adds `DB = "PRSE"` and `ID_f = "PRSE-<ID>"` (hyphenated; becomes `PRSI_` in the merge script).
+9. Saves `PROSE/prose_cdm_ready.rds` and `.csv`, a QC summary, and basic summary statistics.
+
+Notable detail:
+
+- The CDM is read from the `prose-lvscd` dataset folder rather than `prose-icd`.
+
+## Merge Script
 
 ### `Final_merge_script.R`
 
-This script merges the ICD cohort with the four processed registry datasets.
+Inputs:
+
+- `Data_Transfer_to_Charite/ICD.csv` (ICD master cohort)
+- The four `*_cdm_ready.rds` files
 
 Main steps:
 
-- Loads the ICD master CSV plus processed EU-CERT, HELIOS, ISRAEL, and PROSE RDS files.
-- Normalises IDs for CERT, HELS, and PRSE by trimming and replacing hyphens with underscores.
-- Harmonises endpoint/follow-up column names:
-  - `Status_death`
-  - `Time_death_days`
-  - `t_followup_days`
-  - `Status_FIS`
-  - `Time_FIS_days`
-- Applies registry-specific naming fixes:
-  - EU-CERT: `fu_days_from_dates -> t_followup_days`, `Time_death -> Time_death_days`, `Time_FIS -> Time_FIS_days`.
-  - PROSE: `Time_death -> Time_death_days`, `Time_inapp -> Time_FIS_days`, `PRSE_` ID prefix changed to `PRSI_`.
-- Stacks the four processed endpoint datasets.
-- Merges stacked endpoint data into the ICD master cohort by `ICD$ID == stacked$ID_f`.
-- Keeps only target databases `CERT`, `HELS`, `ISRL`, and `PRSE`.
-- Drops rows without matched `Status_death`.
-- Writes QC outputs for duplicates, completeness by DB, before/after counts, ID matching, and FIS-after-follow-up flags.
-- Saves `icd_merged1.rds` and `icd_merged1.csv`.
+1. Normalises IDs for CERT, HELS, and PRSE (trim, hyphens to underscores); ISRL already uses underscores.
+2. Changes the PROSE ID prefix `PRSE_` to `PRSI_` so IDs match the master file (the `DB` value stays `PRSE`).
+3. Harmonises endpoint column names to `Status_death`, `Time_death_days`, `t_followup_days`, `Status_FIS`, `Time_FIS_days`:
+   - CERT: `fu_days_from_dates` -> `t_followup_days`, `Time_death` -> `Time_death_days`, `Time_FIS` -> `Time_FIS_days`.
+   - PROSE: `Time_death` -> `Time_death_days`, `Time_inapp` -> `Time_FIS_days`.
+4. Stacks the four registries on the required endpoint columns; checks for duplicate IDs.
+5. Left-merges the ICD master cohort onto the stacked endpoints by `ICD$ID == stacked$ID_f`.
+6. Keeps only `DB` in `CERT`, `HELS`, `ISRL`, `PRSE`.
+7. The analysis cohort is the rows with a matched (non-NA) `Status_death`.
+8. Writes QC outputs: duplicates, completeness by DB, before/after counts, ID-match summary, and FIS-after-follow-up rows.
+9. Saves `FINAL_ICD_COHORT/icd_merged1.rds` and `icd_merged1.csv`.
 
 ### `Variables_overview.R`
 
-This script creates a `gt` HTML table documenting, by source registry, how mortality, exposure, and follow-up variables were constructed. It is documentation/QC output rather than a data-transformation step.
+Reads no data; builds a static `gt` table documenting, per registry, the raw variables and rules used to construct mortality, FIS, and follow-up endpoints. Output: `Study1/outputs/table_variable_construction_by_dataset.html`.
 
-## Numbered Analysis Scripts
+## Core Cleaning Scripts
 
-### 1. `1.Preliminary analysis.R`
+### `1.Preliminary analysis.R`
 
-This is the first main analysis-stage script after the merged ICD cohort is available.
+Input:
 
-Inputs:
+- `FINAL_ICD_COHORT/icd_merged1.csv`
 
-- `T:/FINAL ICD COHORT/icd_merged1.csv`
+Main steps:
+
+1. Report-only checks: LVEF inclusion counts, duplicate IDs.
+2. Sets inadmissible measurements to NA without dropping rows:
+   - `BMI` <12 or >69; `BUN` >900; `Haemoglobin` <2 or >110; `LDL` ==0; `Sodium` <99; `Triglycerides` <20; `TSH` ==0; `HR` <25 or >140; `PR` <=50 or >1000; `QRS` <50; `QTc` <=250 or >790.
+3. Applies the <=40-day baseline rule: rows flagged by baseline label text, `Time_zero_Y`/`Time_zero_Ym` <= 40/365.25, or `Time_index_MI_CHD` <= 40 days have `SBP`, `DBP`, `CRP`, `Troponin_T`, `NYHA`, `AV_block`, `AV_block_II_or_III` set to NA.
+4. Standardises NYHA to ordered `I < II < III < IV`.
+5. Converts 38 binary-like clinical fields to ordered `No < Yes` factors and creates matching `bin_*` 0/1 indicators; creates `bin_sex_male`.
+6. Saves `FINAL_ICD_COHORT/standardised_data1.csv` and `standardised_data1.rds`.
+
+### `2.Variable_transformation.R`
+
+Input:
+
+- `FINAL_ICD_COHORT/standardised_data1.rds`
+
+Main steps:
+
+1. Selects numeric candidates, excluding IDs, outcomes, exposure, time variables, `bin_*`, and existing `*_log1p` columns.
+2. Computes Bowley skewness per candidate.
+3. Creates `<var>_log1p = log1p(var)` where Bowley >= 0.2, values are non-negative, and at least 10 unique non-missing values exist.
+4. Drops the transform if it over-corrects to negative Bowley skewness.
+5. Creates SAP age groups `age_group` (`<=50`, `51-65`, `66-75`, `>75`) and a descriptive `age_group_desc`.
+6. Saves `FINAL_ICD_COHORT/Transformed_data1.rds` (RDS only; exploratory plots print to the Plots pane and are not saved).
+
+### `3.data_cleaning_incidence_power_calc.R`
+
+Input:
+
+- `FINAL_ICD_COHORT/Transformed_data1.rds`
+
+This script defines the final analytic cohort used by everything downstream.
+
+Cleaning rules, applied once in this order:
+
+- `O1`: drop rows with missing or non-positive `Time_death_days`.
+- `O2`: missing `Status_death` with valid follow-up -> recoded censored (0).
+- `E1`: both `Status_FIS` and `Time_FIS_days` missing -> unexposed, FIS time set to `Time_death_days`.
+- `E2`: FIS time present but status missing -> exposed.
+- `E4`: exposed with unknown FIS timing -> hard exclusion.
+- `E5`: FIS at or after end of follow-up -> reclassified unexposed, FIS time set to `Time_death_days`.
+- `E6`: unexposed with missing FIS time -> FIS time set to `Time_death_days`.
+
+After cleaning, no NAs remain in the four endpoint variables (verified by assertion).
 
 Outputs:
 
-- `T:/FINAL ICD COHORT/standardised_data1.csv`
-- `T:/FINAL ICD COHORT/standardised_data1.rds`
+- `derived/Study1/master_clean_dataset1.rds`
+- `TableS1_CohortDerivation.html`
+- Crude all-cause mortality and first-inappropriate-shock incidence per 100 person-years with exact Poisson CIs (`results_crude_death`, `inappropriate_therapy_incidence`)
+- `deaths_by_exposure`, `exposure_summary`
+- Post-hoc power tables using the Schoenfeld approximation (`power_posthoc_table`, `power_mdhr_summary`, `power_curve_table`)
 
-Main responsibilities:
+Notable detail:
 
-- Loads the merged ICD cohort.
-- Checks LVEF inclusion logic and duplicate IDs.
-- Applies inadmissible value rules by setting implausible measurements to `NA`, without dropping rows. Examples:
-  - `BMI < 12` or `BMI > 69`.
-  - `BUN > 900`.
-  - `Haemoglobin < 2` or `> 110`.
-  - `LDL == 0`.
-  - `Sodium < 99`.
-  - `Triglycerides < 20`.
-  - `TSH == 0`.
-  - `HR < 25` or `> 140`.
-  - `PR <= 50` or `> 1000`.
-  - `QRS < 50`.
-  - `QTc <= 250` or `> 790`.
-- Applies the `<=40 day` baseline rule. If a patient is flagged as being within 40 days by baseline label, year-based timing, or day-based timing, selected variables are set to `NA`: `SBP`, `DBP`, `CRP`, `Troponin_T`, `NYHA`, `AV_block`, and `AV_block_II_or_III`.
-- Standardises NYHA as ordered `I < II < III < IV`.
-- Standardises binary-like fields to ordered `No < Yes` factors for tables.
-- Creates `bin_*` 0/1 variables for Cox modelling.
-- Creates `bin_sex_male`.
+- The console footer still references the old unsuffixed name `master_clean_dataset.rds`; the saved file is `master_clean_dataset1.rds`.
+- Comments mention a rule E3, but no E3 code block exists.
 
-### 2. `2.Variable_transformation.R`
+## Descriptive Scripts
 
-Inputs:
+### `4.Table 1 and table S3.R`
 
-- `T:/FINAL ICD COHORT/standardised_data1.rds`
+Input:
+
+- `master_clean_dataset1.rds`
+
+Main steps:
+
+1. Recodes `Status_FIS` and all `bin_*` variables to strict 0/1; re-standardises NYHA.
+2. Excludes variables with >=80% missingness from Table 1.
+3. Builds Table 1 by `Status_FIS` (Overall / shock / no shock, plus a Missing column): continuous variables as mean +/- SD, categorical as n (%) of the non-missing group denominator. No p-values by design (severely imbalanced groups; confounding assessment cited instead).
+4. Renders NYHA as a 4-level categorical block within the Clinical parameters section.
+5. Builds the supplementary missing-data summary (outcome/exposure block plus labelled covariates; >=80% rows highlighted).
+
+Outputs:
+
+- `Table1_baseline.html/.csv/.rds`
+- `Supplementary_Missing_Data.html/.csv`
+
+### `5.KM1.R`
+
+Input:
+
+- `master_clean_dataset1.rds`
+
+Main steps:
+
+1. Restricts to positive `Time_FIS_days`; derives `Time_FIS_years = Time_FIS_days / 365.25`.
+2. Fits `survfit(Surv(Time_FIS_years, Status_FIS) ~ 1)`.
+3. Plots cumulative incidence (1 - KM) of first inappropriate shock over 0-5 years with 95% CI and a risk-table panel; reports cumulative incidence at 1/3/5 years and checks median estimability.
 
 Output:
 
-- `T:/FINAL ICD COHORT/Transformed_data1.rds`
+- `KM_FigA_time_to_FIS_fullcohort.png/.pdf`
 
-Main responsibilities:
+### `6.KM2.R`
 
-- Identifies numeric candidate variables for skewness assessment, excluding IDs, outcomes, exposure variables, time variables, existing binary indicators, and existing `*_log1p` variables.
-- Produces exploratory histograms for candidate variables.
-- Calculates Bowley skewness.
-- Applies `log1p()` transformations where:
-  - Bowley skewness is at least 0.2.
-  - Values are non-negative.
-  - There are at least 10 unique non-missing values.
-- Drops a log transform if it over-corrects skewness into negative Bowley skewness.
-- Creates before/after boxplot and histogram checks.
-- Creates SAP age categories:
-  - `<=50`
-  - `51-65`
-  - `66-75`
-  - `>75`
-- Creates a descriptive `age_group_desc`.
+Input:
 
-### 3. `3.data_cleaning_incidence_power_calc.R`
+- `master_clean_dataset1.rds`
 
-Inputs:
+Main steps:
 
-- `T:/FINAL ICD COHORT/Transformed_data1.rds`
+1. Derives `Time_death_years` and `shock_group` (ever vs never inappropriate shock).
+2. Fits `survfit(Surv(Time_death_years, Status_death) ~ shock_group)`.
+3. Plots overall survival over 0-5 years (no CI bands, no risk table).
 
-Outputs:
+Output:
 
-- `T:/Study_1/master_clean_dataset1.rds`
-- `TableS1_CohortDerivation.html`
-- `results_crude_death.csv/.html`
-- `inappropriate_therapy_incidence.csv/.html`
-- `deaths_by_exposure.csv/.html`
-- `exposure_summary.csv/.html`
-- `power_posthoc_table.csv/.html`
-- `power_mdhr_summary.csv/.html`
-- `power_curve_table.csv/.html`
+- `KM_FigB_survival_by_shock_fullcohort.png/.pdf`
 
-This script defines the final analytic cohort. Its rules are central to all downstream analyses.
+Both KM figures are explicitly descriptive: they do not model the exposure as time-dependent.
 
-Outcome cleaning rules:
+## Multiple Imputation
 
-- `O1`: remove patients with missing or zero `Time_death_days`.
-- `O2`: if `Status_death` is missing but valid follow-up exists, recode as censored/alive (`0`).
+### `7.mice_full_cohort.R`
 
-Exposure cleaning rules:
+Input:
 
-- `E1`: if both `Status_FIS` and `Time_FIS_days` are missing, classify as unexposed and set FIS time to `Time_death_days`.
-- `E2`: if FIS time exists but status is missing, classify as exposed.
-- `E4`: if marked exposed but FIS timing is unknown, exclude the patient.
-- `E5`: if FIS occurs at or after end of follow-up, reclassify as unexposed and set FIS time to `Time_death_days`.
-- `E6`: if unexposed with missing FIS time, set FIS time to `Time_death_days`.
+- `master_clean_dataset1.rds`
 
-Analytical outputs:
+Main steps:
 
-- A cohort derivation table grouped by outcome and exposure handling.
-- Crude all-cause mortality incidence per 100 person-years with exact Poisson CI.
-- Crude first inappropriate ICD shock incidence per 100 person-years with exact Poisson CI.
-- Death counts by ever/never inappropriate shock status.
-- Exposure distribution summary.
-- Post-hoc Cox power and minimum detectable hazard ratio using the Schoenfeld approximation.
+1. Builds the imputation dataset from ID/DB, outcome, exposure, time-zero, continuous, categorical, and `bin_*` variables; pre-existing `*_log1p` columns are removed so they can be re-derived passively during imputation.
+2. Drops variables with >80% missingness and base variables duplicated by a `bin_*` version.
+3. Runs missingness diagnostics (lollipop plot, Little's MCAR test, MAR quick screen).
+4. Builds the MICE specification: IDs, outcomes, exposures, and time-zero variables are not imputed; outcomes are used as predictors, exposures are not; binary/factor variables use `logreg`/`polyreg`, numerics use `pmm`; `*_log1p` transforms are configured passively as `~I(log1p(base))`.
+5. Special handling:
+   - `bin_anti_diabetic` (collinear with `bin_diabetes`): filled from `bin_diabetes`, remaining NA set to 0, not imputed.
+   - `bin_anti_diabetic_insulin`: forced `logreg` if two levels exist, otherwise constant-filled.
+   - `bin_av_block_ii_or_iii` (~75% missing, rare positives): NA filled with 0, not imputed.
+6. A guardrail trial imputation removes rows that remain non-imputable.
+7. Runs `mice(m = 20, maxit = 10)` with seed 123; asserts no remaining NAs in imputation targets.
 
-### 4. `4.Table 1 and table S3.R`
+Outputs (under `derived/Study1/Imputed_data/`):
 
-Inputs:
+- `mice_full_object1.rds` (`mids` object)
+- `full_imputed_long1.csv`
+- `mice_audit_log_FULL1.csv`
+- `Logs/missingness_full1.csv`
+- `Figures/missingness_lollipop_top40_FULL.png/.pdf`
 
-- `T:/Study_1/master_clean_dataset1.rds`
+Notable detail:
 
-Outputs:
+- The console "Saved:" message lists stale train/test filenames that are no longer written; only the full-cohort artifacts above are produced.
 
-- `Table1_baseline.html`
-- `Table1_baseline.csv`
-- `Table1_baseline.rds`
-- `Supplementary_Missing_Data.html`
-- `Supplementary_Missing_Data.csv`
+## Primary Cox Modelling
 
-Main responsibilities:
+### `8.full_cohort_cox_model_and_development.R`
 
-- Builds Table 1 by `Status_FIS`.
-- Uses no p-values by design because the groups are strongly imbalanced and p-values are considered unhelpful for confounding assessment.
-- Reports binary variables as `n (%)` using non-missing group denominators.
-- Reports continuous variables as mean +/- SD.
-- Shows NYHA as a 4-level categorical block.
-- Excludes variables with at least 80% missingness from Table 1.
-- Creates a supplementary missing data summary for outcome/exposure variables and covariates.
+Input:
 
-Table sections include:
-
-- Demographic
-- Clinical parameters
-- Comorbidities
-- Arrhythmia / Conduction / ECG
-- Medical history
-- Medications
-- Laboratory
-
-### 5. `5.KM1.R`
-
-Inputs:
-
-- `T:/Study_1/master_clean_dataset1.rds`
-
-Outputs:
-
-- `KM_FigA_time_to_FIS_fullcohort.png`
-- `KM_FigA_time_to_FIS_fullcohort.pdf`
-
-Main responsibilities:
-
-- Fits `survfit(Surv(Time_FIS_years, Status_FIS) ~ 1)`.
-- Plots cumulative incidence of first inappropriate ICD shock over 0-5 years.
-- Computes whether median time to first inappropriate shock is estimable.
-- Computes cumulative incidence at 1, 3, and 5 years.
-- Builds a risk table panel under the figure.
-
-This curve is explicitly descriptive and does not account for the time-dependent nature of exposure.
-
-### 6. `6.KM2.R`
-
-Inputs:
-
-- `T:/Study_1/master_clean_dataset1.rds`
-
-Outputs:
-
-- `KM_FigB_survival_by_shock_fullcohort.png`
-- `KM_FigB_survival_by_shock_fullcohort.pdf`
-
-Main responsibilities:
-
-- Groups patients by ever/never inappropriate shock.
-- Fits `survfit(Surv(Time_death_years, Status_death) ~ shock_group)`.
-- Produces overall survival curves over 0-5 years.
-- Prints deaths by shock group.
-
-This figure is also descriptive only because ever/never exposure grouping does not model the exposure as time-dependent.
-
-### 7. `7.mice_full_cohort.R`
-
-Inputs:
-
-- `T:/Study_1/master_clean_dataset1.rds`
-
-Outputs:
-
-- `T:/Study_1/Imputed_data/mice_full_object1.rds`
-- `T:/Study_1/Imputed_data/full_imputed_long1.csv`
-- `T:/Study_1/Imputed_data/mice_audit_log_FULL1.csv`
-- Missingness figures and logs under `T:/Study_1/Imputed_data/Figures` and `T:/Study_1/Imputed_data/Logs`
-
-Main responsibilities:
-
-- Builds a full-cohort imputation dataset.
-- Keeps ID, outcome, exposure, time-zero variables, continuous variables, categorical variables, binary variables, and base variables required for passive log transforms.
-- Removes pre-existing `*_log1p` columns from the imputation dataset so they can be passively derived after or during imputation.
-- Summarises and plots missingness.
-- Drops variables with more than 80% missingness.
-- Removes duplicate base variables when a `bin_*` version exists.
-- Runs optional missingness diagnostics:
-  - Little's MCAR test on numeric variables.
-  - A MAR quick screen using missingness indicators regressed against observed predictors.
-- Builds a MICE specification:
-  - IDs, outcomes, exposures, and time-zero variables are not imputed.
-  - Outcome variables can be used as predictors.
-  - Exposure variables are not used as predictors.
-  - ID and time-zero variables are not used as predictors.
-  - Binary/factor variables use logistic or polytomous regression.
-  - Numeric variables use predictive mean matching.
-  - Passive `*_log1p` transforms are configured where the base variable exists.
-- Applies special handling for problematic binary variables:
-  - `bin_anti_diabetic` filled from `bin_diabetes`, with remaining missing values set to 0.
-  - `bin_anti_diabetic_insulin` forced to logistic imputation or filled as a constant if only one level exists.
-  - `bin_av_block_ii_or_iii` filled with 0 due to very high missingness and rare positives.
-- Uses a guardrail test imputation to remove rows that remain non-imputable.
-- Runs MICE with `m = 20`, `maxit = 10`, seed `123`.
-- Saves the `mids` object and an audit log.
-
-### 8. `8.full_cohort_cox_model_and_development.R`
-
-Inputs:
-
-- `T:/Study_1/Imputed_data/mice_full_object1.rds`
-
-Output directory:
-
-- `T:/Study_1/Supplementary_data/Primary`
-
-This is the main primary modelling script.
+- `Imputed_data/mice_full_object1.rds` (m = 20)
 
 Primary estimand:
 
 - Outcome: all-cause mortality.
-- Exposure: time-dependent inappropriate ICD shock (`FIS_td`).
-- Time scale: days from ICD implantation to death or censoring.
+- Exposure: time-dependent first inappropriate shock (`FIS_td`).
+- Time scale: days from ICD implantation.
 - Cohort handling: `strata(DB)` in the primary model.
-- Pooling: Rubin-style pooling across 20 MICE imputations.
+- Pooling: Rubin's rules across the 20 imputations.
 
-Core model construction:
+Main steps:
 
-- Converts each imputed wide dataset into start-stop long format using `survival::tmerge`.
-- Defines death as `event(Time_death_days, Status_death == 1)`.
-- Defines time-dependent FIS using `tdc(Time_FIS_days)`.
-- Ensures one baseline row per `ID`.
+1. Converts each imputed dataset to start-stop long format with `survival::tmerge`: `death = event(Time_death_days, Status_death == 1)`, `FIS_td = tdc(Time_FIS_days)`; one baseline row per ID; degenerate intervals removed.
+2. Forced covariates: `Age`, `bin_sex_male`, `LVEF`, `NYHA` (4-level factor), `bin_diabetes`, `eGFR`, `bin_beta_blockers`, `bin_af_atrial_flutter`.
+3. Screens 22 candidate covariates in `FIS_td + X` models; keeps pooled p < 0.05.
+4. Correlation pruning: among numeric pairs with |r| > 0.70, keeps the forced variable, else the one with the smaller screening p-value.
+5. Backward selection on non-forced covariates (drop highest pooled p while >= 0.05); forced variables never dropped.
+6. Diagnostics on imputation 1: `cox.zph` proportional-hazards test and Martingale-residual linearity plots for continuous final covariates.
+7. Primary model: `Surv(tstart, tstop, death) ~ FIS_td + <final covariates> + strata(DB)`, pooled across imputations.
+8. Interaction tests between `FIS_td` and final-model covariates (NYHA tested as binary `NYHA_bin`).
+9. Subgroup HRs for `FIS_td` within: age group (<65 / 65-75 / >75), LVEF (<30 / 30-35 / >35), sex, AF/flutter, diabetes, NYHA I-II vs III-IV; forest plots.
 
-Forced covariates:
-
-- `Age`
-- `bin_sex_male`
-- `LVEF`
-- `NYHA`
-- `bin_diabetes`
-- `eGFR`
-- `bin_beta_blockers`
-- `bin_af_atrial_flutter`
-
-Candidate covariates include:
-
-- `bin_hypertension`
-- `bin_smoking`
-- `Haemoglobin`
-- `SBP`
-- `BMI`
-- `HR`
-- `QRS_log1p`
-- `bin_hf`
-- `bin_stroke_tia`
-- `bin_av_block`
-- `bin_lbbb`
-- `bin_ace_inhibitor`
-- `bin_ace_inhibitor_arb`
-- `bin_diuretics`
-- `bin_anti_arrhythmic_iii`
-- `bin_anti_coagulant`
-- `bin_anti_platelet`
-- `bin_lipid_lowering`
-- `bin_anti_diabetic_oral`
-- `bin_digitalis_glycosides`
-- `bin_pci`
-- `HasMRI`
-
-Model development steps:
-
-1. Fit crude `FIS_td` model.
-2. Screen each covariate in a model with `FIS_td + covariate`.
-3. Keep screened variables with p-value `<0.05`.
-4. Combine forced and screened variables.
-5. Perform correlation pruning for numeric variables with `|r| > 0.70`, preserving forced variables.
-6. Fit a full multivariable model.
-7. Apply backward selection to non-forced covariates.
-8. Fit the final selected model.
-9. Check proportional hazards using `cox.zph` on imputation 1.
-10. Check continuous-variable linearity using Martingale residual plots.
-11. Fit the primary model with `strata(DB)`.
-12. Run exposure feasibility checks, interactions, and subgroups.
-
-Important outputs:
+Outputs (all in `Study1/outputs/`):
 
 - `00_crude_FIS_model.html`
-- `01_screening_summary.html`
-- `01_screening_summary_formatted.html`
-- `01_screening_factor_details1.csv`
+- `01_screening_summary.html`, `01_screening_summary_formatted.html`, `01_screening_factor_details1.csv`
 - `02_high_correlations.csv/.html`
 - `03_full_model.csv`
-- `04_final_model1.csv/.html`
-- `04_final_model1_pretty.html`
-- `05_ph_test.txt`
-- `05_ph_plots.pdf`
-- `05_linearity_plots.pdf`
+- `04_final_model1.csv/.html`, `04_final_model1_pretty.html`
+- `05_ph_test.txt`, `05_ph_plots.pdf`, `05_linearity_plots.pdf`
 - `07_primary_model_strata_DB.csv/.html`
 - `08_interaction_tests.csv/.html`
-- `09_subgroup_HR_FIS_td.csv`
-- `09_subgroup_table.png/.pdf`
-- `14_forest_plot_subgroups.png/.pdf`
-- `14_forest_HR_sidetable.png/.pdf`
+- `09_subgroup_HR_FIS_td.csv`, `09_subgroup_table.png/.pdf`
+- `14_forest_plot_subgroups.png/.pdf`, `14_forest_HR_sidetable.png/.pdf`
 
-Interaction testing:
+Notable detail:
 
-- Tests interactions between `FIS_td` and selected final-model covariates.
-- Uses binary `NYHA_bin` for NYHA interaction testing to avoid collinearity with the 4-level factor.
+- `QRS_log1p` is manually injected into the `mids` object for rows with missing `QRS` before use.
+- `09_subgroup_table.png/.pdf` is written twice; the second, re-themed block overwrites the first.
 
-Subgroups:
+## Landmark Cox Sensitivity Analysis
 
-- Age group: `<65`, `65-75`, `>75`
-- LVEF category: `<30`, `30-35`, `>35`
-- Sex
-- Atrial fibrillation/flutter
-- Diabetes mellitus
-- NYHA class: `I-II` vs `III-IV`
-
-### 9. `9.Landmark_analysis.R`
+### `9.Landmark_analysis.R`
 
 Inputs:
 
-- `T:/Study_1/Imputed_data/mice_full_object1.rds`
-- Optional comparison input: `T:/Study_1/Supplementary_data/Primary/07_primary_model_strata_DB.csv`
+- `Imputed_data/mice_full_object1.rds`
+- `Study1/outputs/07_primary_model_strata_DB.csv` (for the comparison table)
 
-Output directory:
+Main steps:
 
-- `T:/Study_1/Supplementary_data/Sensitivity`
+1. Landmarks at 183, 365, and 730 days (6, 12, 24 months).
+2. At each landmark: keeps patients with `Time_death_days > L`; defines `FIS_L = 1` if `Status_FIS == 1` and `Time_FIS_days <= L` (ambiguous exposed-without-time cases dropped); restarts the clock (`t_landmark = Time_death_days - L`).
+3. Fits per landmark per imputation:
 
-Purpose:
-
-- Sensitivity analysis to the primary time-dependent Cox model.
-- Addresses immortal time bias through landmark restriction rather than counting-process start-stop modelling.
-
-Landmarks:
-
-- 6 months: 183 days.
-- 12 months: 365 days.
-- 24 months: 730 days.
-
-At each landmark:
-
-- Includes only patients alive beyond the landmark.
-- Defines `FIS_L` as any inappropriate shock at or before the landmark.
-- Starts follow-up clock at the landmark.
-- Models all-cause mortality after the landmark.
-
-Model:
-
-```text
+```r
 Surv(t_landmark, event) ~ FIS_L + Age_10 + LVEF_5 + eGFR_10 +
   QRS_log1p + bin_beta_blockers + bin_diabetes + bin_stroke_tia +
   bin_af_atrial_flutter + bin_sex_male + NYHA_grp + strata(DB)
 ```
 
-Details:
-
-- `NYHA` is dichotomised as `I-II` vs `III-IV`.
-- `Age`, `LVEF`, and `eGFR` are rescaled for interpretability.
-- `QRS_log1p` is derived from raw `QRS`.
-- Estimates are pooled across imputations using `mice::pool()`.
+   with `Age/10`, `LVEF/5`, `eGFR/10` rescaling, `QRS_log1p = log1p(QRS)` derived in-script, and NYHA dichotomised (`NYHA_grp`, I-II vs III-IV).
+4. Pools with `mice::pool()`; counts (N at risk, exposed, deaths) taken from imputation 1.
 
 Outputs:
 
-- Forest plots per landmark.
-- HR tables per landmark.
+- Per landmark: `HR_table_<lm>.pdf`, `forest_<lm>.png/.pdf`
 - `SUMMARY_Landmark_fullcohort.csv/.html`
 - `LANDMARK_risk_table.csv/.html`
 - `COMPARISON_primary_vs_landmark.csv/.html`
 
-### 10. `10.Fine_gray.R`
+## Fine-Gray Competing-Risk Sensitivity Analysis
 
-Inputs:
+### `10.Fine_gray.R`
 
-- `T:/Study_1/Imputed_data/mice_full_object1.rds`
+Input:
 
-Output directory:
+- `Imputed_data/mice_full_object1.rds`
 
-- `T:/Study_1/Supplementary_data/Fine_gray`
+Main steps:
 
-Purpose:
-
-- Landmark competing-risk sensitivity analysis using Fine-Gray subdistribution hazard models.
-
-Landmarks:
-
-- 6, 12, and 24 months, converted with `30.4375` days per month.
-
-Competing-risk setup:
-
-- `VAR_TIME <- "Survival_time"` in months, converted to days.
-- `VAR_STATUS <- "Status"` where:
-  - `0` means censored/alive.
-  - `1` means appropriate shock.
-  - `2` means death.
-- `Status_FIS` and `Time_FIS_days` define inappropriate shock exposure before the landmark.
-
-Important analysis differences:
-
-- `cmprsk::crr()` is used.
-- `DB` is not included because `crr()` does not support `strata(DB)`.
-- NYHA is binary (`III-IV` vs `I-II`).
-- QRS is transformed inside the script as `log1p(QRS)`.
-- `Time_FIS_days > Survival_time_days` is reclassified as unexposed.
-- Missing or zero `Survival_time` is excluded.
-- Missing `Status` is treated as censored.
+1. Uses `Survival_time` (months, converted with 30.4375 days/month) and `Status` (0 = censored/alive, 1 = appropriate ICD shock = event of interest, 2 = death as competing event).
+2. Landmarks at 183, 365, and 731 days.
+3. Excludes missing/zero `Survival_time`; treats missing `Status` as censored; reclassifies `Time_FIS_days > time_days` as unexposed (Rule E); applies the same landmark restriction and `FIS_L` derivation as script 9.
+4. Fits `cmprsk::crr(..., failcode = 1, cencode = 0)` with the landmark adjustment set, but NYHA binarised and no `strata(DB)` (`crr()` does not support stratification).
+5. Pools across imputations with manual Rubin's rules; falls back to imputation 1 if pooling is infeasible.
+6. CIF plots with `cuminc()` grouped by `FIS_L` from imputation 1.
 
 Outputs:
 
-- Fine-Gray sHR PDF tables per landmark.
-- Fine-Gray forest plots per landmark.
-- CIF plots per landmark using imputation 1.
-- `TableS2_FineGray_CohortDerivation.html`.
-- Console QC summaries for at-risk, exposed, and cause-specific event counts.
+- Per landmark: `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`, `FULL_CIF_<lm>.png/.pdf`
+- `TableS2_FineGray_CohortDerivation.html`
 
-## Key Variables and Concepts
+Important distinction:
 
-| Variable | Meaning |
-|---|---|
-| `ID` | Patient identifier in the merged cohort. |
-| `DB` | Source cohort/database code: `CERT`, `HELS`, `ISRL`, `PRSE`. |
-| `Status_death` | All-cause mortality indicator for Cox/KM analyses. |
-| `Time_death_days` | Follow-up time to death or censoring in days. |
-| `Status_FIS` | Indicator for first inappropriate ICD shock/therapy. |
-| `Time_FIS_days` | Time to first inappropriate shock/therapy or censoring time, in days. |
-| `FIS_td` | Time-dependent exposure created by `tmerge()` for the primary Cox model. |
-| `FIS_L` | Landmark-fixed exposure: inappropriate shock by landmark time. |
-| `Survival_time` | Used in Fine-Gray script; documented there as months. |
-| `Status` | Fine-Gray competing-risk status: censored, appropriate shock, death. |
-| `NYHA` | NYHA class, generally handled as 4-level factor in primary Cox. |
-| `NYHA_bin` / `NYHA_grp` | Dichotomised NYHA for interactions, subgroups, and landmark analyses. |
-| `QRS_log1p` | Log-transformed QRS duration, generally derived from raw `QRS`. |
-| `bin_*` | Binary 0/1 variables created from harmonised clinical fields. |
+- The Fine-Gray script uses `Survival_time`/`Status` (appropriate shock vs death), while the Cox/KM analyses use `Time_death_days`/`Status_death` (all-cause mortality). The two endpoint pairs answer different questions and should be documented carefully in any methods write-up.
 
-## Statistical Approach
+## Key Derived Variables
 
-The primary analysis is a Cox proportional hazards model for all-cause mortality with inappropriate ICD shock modelled as a time-dependent exposure. This avoids classifying exposed patients as exposed before their shock occurred.
+### `Status_death` / `Time_death_days`
 
-The model uses multiple imputation for missing covariates and pools estimates across 20 imputed datasets. The primary model includes `strata(DB)` so that baseline hazards may differ by source cohort.
+All-cause mortality indicator and time in days. Constructed per registry (CERT `death` + `length_fu_mortality` with heart-transplant reclassification; HELIOS `Status_death_cat` + `DAYS2DEATH.ICD`/`DAYS2LastFU.ICD`; ISRAEL `Status_last` + `Alive_last_FU_days`; PROSE `Death_status` + `Death_days`), harmonised in the merge script, and finalised by cleaning rules O1/O2.
 
-Sensitivity analyses include:
+### `Status_FIS` / `Time_FIS_days`
 
-- Landmark Cox models at 6, 12, and 24 months.
-- Fine-Gray landmark competing-risk analyses at 6, 12, and 24 months.
-- Interaction tests and prespecified subgroup analyses.
+First inappropriate ICD shock/therapy indicator and time in days. Constructed per registry (CERT `inap_shock` + `length_fu_inap_shock`; HELIOS `inappropriate_shock` + `DAYS2_inappropriate_shock.ICD`; ISRAEL `Inapp_shock_1st` + `Inapp_shock_days`; PROSE `inappshock` + `t_inappshock`), harmonised in the merge script, and finalised by cleaning rules E1/E2/E4/E5/E6. For unexposed patients, `Time_FIS_days` equals `Time_death_days`.
 
-## Dependencies
+### `FIS_td`
 
-The scripts use common R packages including:
+Time-dependent exposure created by `survival::tmerge` in script 8: switches 0 -> 1 at `Time_FIS_days` in start-stop format, so patients are not classified as exposed before their shock.
 
-- `tidyverse`
-- `dplyr`
-- `data.table`
-- `survival`
-- `mice`
-- `naniar`
-- `VIM`
-- `openxlsx`
-- `readxl`
-- `gt`
-- `ggplot2`
-- `grid`
-- `gridExtra`
-- `patchwork`
-- `scales`
-- `survminer`
-- `cmprsk`
-- `timeROC`
-- `prodlim`
-- `riskRegression`
-- `broom`
-- `haven`
-- `stringr`
+### `FIS_L`
 
-Many scripts call `install.packages()` inline. That makes first-run setup convenient but can be undesirable for reproducible or locked-down production environments.
+Landmark-fixed exposure used in scripts 9 and 10: 1 if an inappropriate shock occurred at or before the landmark.
 
-## Output Organization
+### `Survival_time` / `Status`
 
-The code writes to several external folders:
+Fine-Gray endpoint pair used only in script 10: `Survival_time` in months; `Status` coded 0 = censored, 1 = appropriate shock, 2 = death.
 
-- `T:/FINAL ICD COHORT`
-  - merged and standardised datasets.
-- `T:/Study_1`
-  - master clean dataset.
-- `T:/Study_1/Supplementary_data`
-  - Table 1, missingness, incidence, power, and KM outputs.
-- `T:/Study_1/Imputed_data`
-  - MICE objects, long imputed CSV, audit logs, missingness figures.
-- `T:/Study_1/Supplementary_data/Primary`
-  - primary Cox model outputs.
-- `T:/Study_1/Supplementary_data/Sensitivity`
-  - landmark Cox sensitivity outputs.
-- `T:/Study_1/Supplementary_data/Fine_gray`
-  - Fine-Gray sensitivity outputs.
+### `bin_*` and `bin_sex_male`
 
-## Implementation Notes and Risks
+0/1 modelling indicators created in script 1 from the standardised No/Yes clinical fields.
 
-The codebase is understandable as a sequential analysis record, but it has several maintainability and reproducibility issues:
+### `*_log1p`
 
-- Paths are hard-coded to Windows/network drives. The scripts will not run unchanged on another machine.
-- Script names and ordering encode the workflow, but there is no formal runner, dependency graph, or project-level configuration.
-- Several scripts install packages at runtime.
-- There are duplicated helper functions across scripts, especially binary conversion, NYHA handling, pooling, and table writing.
-- Some comments and printed messages refer to train/test outputs even though the current MICE script saves only the full-cohort object.
-- Some paths appear to miss a slash, for example `T:Study_1/...` instead of `T:/Study_1/...`.
-- Some code includes duplicated or stale sections, such as repeated `check_required()` definitions and repeated subgroup-table generation.
-- Some labels contain probable typos, for example `QRS_loglp` instead of `QRS_log1p` in presentation recodes.
-- The Fine-Gray script uses `Survival_time` and `Status`, while the primary Cox analysis uses `Time_death_days` and `Status_death`; this distinction is important and should be documented carefully in any methods write-up.
+Log transforms of right-skewed numerics created in script 2 (Bowley >= 0.2, non-negative, >=10 unique values, no over-correction); removed before MICE and passively re-derived during imputation.
 
-## Recommended Refactoring Direction
+### `age_group` / `age_group_desc`
 
-If this codebase were to be hardened for reuse, the highest-impact changes would be:
+SAP age bands (`<=50`, `51-65`, `66-75`, `>75`) created in script 2.
 
-1. Move all paths and constants into one configuration file.
-2. Replace inline `install.packages()` calls with a reproducible environment file such as `renv.lock`.
-3. Split repeated helper functions into shared R files.
-4. Add a top-level runner script that records the pipeline order.
-5. Save run metadata with package versions, input file hashes, and output timestamps.
-6. Add automated QC checks for key assumptions:
-   - no missing `Status_death`, `Time_death_days`, `Status_FIS`, or `Time_FIS_days` after cleaning;
-   - no FIS time after death/follow-up after final cleaning;
-   - consistent source cohort counts through preprocessing and merge;
-   - expected MICE variables and methods.
-7. Standardise file naming and remove stale train/test references if not used.
+### `NYHA_grp` / `NYHA_bin`
 
+Dichotomised NYHA (I-II vs III-IV) used for interactions, subgroups, and the landmark models; the primary Cox model keeps NYHA as a 4-level factor.
+
+## Primary Analysis Population
+
+The primary survival analysis population includes the four registries:
+
+- EU-CERT-ICD (`CERT`)
+- HELIOS (`HELS`)
+- ISRAEL-ICD (`ISRL`)
+- PROSE-ICD (`PRSE`)
+
+The key inclusion logic is:
+
+- Adult ICD recipients.
+- Registry-specific exclusions: ischemic-only, no CRT-D, and no Karolinska overlap centre in EU-CERT; no CRT devices and no LVSCD co-enrolment in PROSE.
+- Successful ID match against the ICD master cohort.
+- Positive, non-missing mortality follow-up (rule O1); classifiable exposure timing (rule E4).
+- `DB` enters the primary model only as a stratification factor.
+
+## Data Products And Expected Outputs
+
+Registry preprocessing outputs (under `derived/Study1/<REGISTRY>/`):
+
+- `eu_cert_icd_cdm_ready.rds/.csv`
+- `helios_cdm_ready.rds/.csv`
+- `processed-isrl-common-data-model.rds`, `processed-ISRAEL-common-data-model.csv`
+- `prose_cdm_ready.rds/.csv`
+- per-registry QC summaries and basic summary workbooks
+
+Merge outputs (`derived/Study1/FINAL_ICD_COHORT/`):
+
+- `icd_merged1.rds`, `icd_merged1.csv`
+- `standardised_data1.csv`, `standardised_data1.rds`
+- `Transformed_data1.rds`
+- QC files under `FINAL_ICD_COHORT/qc/`
+
+Master cohort and imputation outputs:
+
+- `derived/Study1/master_clean_dataset1.rds`
+- `derived/Study1/Imputed_data/mice_full_object1.rds`
+- `derived/Study1/Imputed_data/full_imputed_long1.csv`
+- `derived/Study1/Imputed_data/mice_audit_log_FULL1.csv`
+
+Descriptive outputs (`Study1/outputs/`):
+
+- `TableS1_CohortDerivation.html`
+- `results_crude_death`, `inappropriate_therapy_incidence`, `deaths_by_exposure`, `exposure_summary`, `power_posthoc_table`, `power_mdhr_summary`, `power_curve_table` (csv + html)
+- `Table1_baseline.html/.csv/.rds`
+- `Supplementary_Missing_Data.html/.csv`
+- `KM_FigA_time_to_FIS_fullcohort.png/.pdf`
+- `KM_FigB_survival_by_shock_fullcohort.png/.pdf`
+- `table_variable_construction_by_dataset.html`
+
+Primary model outputs (`Study1/outputs/`):
+
+- `00_crude_FIS_model.html`, `01_screening_summary*.html`, `01_screening_factor_details1.csv`
+- `02_high_correlations.csv/.html`, `03_full_model.csv`, `04_final_model1.*`
+- `05_ph_test.txt`, `05_ph_plots.pdf`, `05_linearity_plots.pdf`
+- `07_primary_model_strata_DB.csv/.html`, `08_interaction_tests.csv/.html`
+- `09_subgroup_HR_FIS_td.csv`, `09_subgroup_table.png/.pdf`
+- `14_forest_plot_subgroups.png/.pdf`, `14_forest_HR_sidetable.png/.pdf`
+
+Sensitivity outputs (`Study1/outputs/`):
+
+- `HR_table_<lm>.pdf`, `forest_<lm>.png/.pdf`, `SUMMARY_Landmark_fullcohort.*`, `LANDMARK_risk_table.*`, `COMPARISON_primary_vs_landmark.*`
+- `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`, `FULL_CIF_<lm>.png/.pdf`, `TableS2_FineGray_CohortDerivation.html`
+
+## Quality Control Embedded In Scripts
+
+The codebase includes several useful QC checks:
+
+- Follow-up consistency checks in preprocessing (date-derived vs registry-reported follow-up; event-after-follow-up flags in every registry).
+- Duplicate-ID checks in preprocessing, merge, and script 1.
+- Completeness-by-registry and ID-match summaries in the merge script.
+- LVEF inclusion counts and endpoint crosstabs in script 1.
+- Missingness summaries, lollipop plot, Little's MCAR test, and a MAR screen in script 7.
+- MICE guardrail trial imputation and a post-run assertion that no NAs remain.
+- Proportional-hazards (`cox.zph`) and Martingale-residual linearity diagnostics in script 8.
+- Exposure feasibility checks (events during exposure) in script 8.
+- Risk tables and event counts per landmark in scripts 9 and 10.
+- A merged-level FIS-after-follow-up check in the merge script and rule E5 in script 3.
+
+## Reproducibility And Maintenance Issues
+
+The following issues are visible from static code inspection:
+
+1. Raw input data are absent from this repository checkout.
+   - Intentional for privacy; the external data root must be available via `PROFID_DATA_ROOT` (or the derived/output roots via their env overrides).
+
+2. `study1_output_path()` silently flattens output subdirectories.
+   - Directory-like arguments are discarded, so all script 3-10 outputs land flat in `Study1/outputs/`.
+   - Filenames are distinct enough to avoid collisions, but the intended folder structure does not exist on disk.
+
+3. HELIOS censored FIS times are lost at preprocessing.
+   - `helios_processing.R` assigns them to a stray `Time_FIS` column instead of `Time_FIS_days`.
+   - Downstream rules E1/E6 backfill from `Time_death_days`, so the master cohort is consistent, but registry-level FIS censoring detail is lost.
+
+4. Landmark cutoffs differ slightly between sensitivity scripts.
+   - Script 9 uses 183/365/730 days; script 10 uses 183/365/731 days (30.4375-day months).
+
+5. `Survival_time`/`Status` versus `Time_death_days`/`Status_death`.
+   - The Fine-Gray script uses a different endpoint pair (appropriate shock as event of interest) than the rest of the pipeline (all-cause mortality); this must be kept distinct in the methods write-up.
+
+6. Stale names and comments.
+   - Script 3's console footer references `master_clean_dataset.rds`; script 4's header references "table S3"; script 7's "Saved:" message lists train/test objects that are no longer written; script 3 comments mention a rule E3 with no code.
+
+7. Inline package installation.
+   - Many scripts call `install.packages()` unconditionally; harmless through the runner shim, but undesirable when scripts are run standalone. There is no `renv.lock` or equivalent.
+
+8. Duplicated helper code.
+   - Binary conversion, NYHA handling, pooling, and table-writing helpers are duplicated across scripts 3-10.
+
+9. The execution harness is sequential rather than dependency-aware.
+   - `master_run.R` encodes the order; there is no `targets` pipeline and no run metadata (package versions, input hashes) is recorded.
+
+10. Some diagnostics print interactively rather than being saved.
+    - Script 2's before/after transformation plots and several QC tables only appear in the console/Plots pane; in batch runs they are lost unless the log captures them.
+
+## Suggested Execution Order
+
+The canonical execution order is defined in `Study1/master_run.R`:
+
+1. `preprocessing_dataset_scripts/eucert_preprocessing.R`
+2. `preprocessing_dataset_scripts/helios_processing.R`
+3. `preprocessing_dataset_scripts/israel_processing.R`
+4. `preprocessing_dataset_scripts/prose_processing.R`
+5. `preprocessing_dataset_scripts/Variables_overview.R` (optional)
+6. `preprocessing_dataset_scripts/Final_merge_script.R`
+7. `1.Preliminary analysis.R`
+8. `2.Variable_transformation.R`
+9. `3.data_cleaning_incidence_power_calc.R`
+10. `4.Table 1 and table S3.R`
+11. `5.KM1.R`
+12. `6.KM2.R`
+13. `7.mice_full_cohort.R`
+14. `8.full_cohort_cox_model_and_development.R`
+15. `9.Landmark_analysis.R`
+16. `10.Fine_gray.R`
+
+Run the canonical sequence:
+
+```bash
+Rscript Study1/master_run.R
+```
+
+or through Slurm:
+
+```bash
+./Study1/run_study1.sh
+```
+
+## Suggested Refactoring Priorities
+
+The codebase would become more reproducible and easier to audit with these changes:
+
+1. Fix `study1_output_path()` so subdirectory arguments are honoured, and move outputs into their intended folder structure.
+2. Fix the HELIOS `Time_FIS`/`Time_FIS_days` assignment and re-derive the affected intermediates.
+3. Align landmark day cutoffs between scripts 9 and 10.
+4. Replace inline `install.packages()` calls with a reproducible environment (`renv.lock`).
+5. Split duplicated helper functions (binary conversion, NYHA handling, pooling, table writing) into a shared R file.
+6. Record run metadata: package versions, input file hashes, output timestamps.
+7. Remove stale train/test and `master_clean_dataset.rds` references, and reconcile table numbering (S2/S3) between scripts and outputs.
+8. Save script 2's transformation diagnostic plots to disk instead of the Plots pane.
