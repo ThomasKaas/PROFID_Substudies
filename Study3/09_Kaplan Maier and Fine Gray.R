@@ -67,12 +67,6 @@ km_fit <- survfit(
   data = dt_final
 )
 
-logrank_fit <- survdiff(
-  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
-  data = dt_final
-)
-logrank_fit
-
 study3_format_p <- function(p) {
   if (is.na(p)) return("NA")
   if (p < 0.001) return("<0.001")
@@ -214,6 +208,26 @@ study3_figure1_year_axis <- function(x_limit) {
   )
 }
 
+study3_figure1_cox_annotation <- function(fit) {
+  fit_summary <- summary(fit)
+  term <- "device_groupSingle"
+  term_idx <- match(term, rownames(fit_summary$coef))
+  if (is.na(term_idx)) {
+    stop(
+      sprintf("Term '%s' not found in the unadjusted Figure 1 Cox model.", term),
+      call. = FALSE
+    )
+  }
+
+  sprintf(
+    "Unadjusted Cox HR (Single vs Double)\nHR %.2f (95%% CI %.2f-%.2f), p = %s",
+    fit_summary$coef[term_idx, "exp(coef)"],
+    fit_summary$conf.int[term_idx, "lower .95"],
+    fit_summary$conf.int[term_idx, "upper .95"],
+    study3_format_p(fit_summary$coef[term_idx, "Pr(>|z|)"])
+  )
+}
+
 study3_export_figure1_data <- function(fit, labels, x_limit = 2200) {
   x_axis <- study3_figure1_year_axis(x_limit)
   x_suffix <- paste0(round(x_limit), "d")
@@ -253,7 +267,7 @@ study3_export_figure1_data <- function(fit, labels, x_limit = 2200) {
 }
 
 study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
-                                           logrank_p = NA_real_,
+                                           cox_annotation = NULL,
                                            show_inset = FALSE) {
   x_axis <- study3_figure1_year_axis(x_limit)
   x_breaks <- x_axis$days
@@ -282,6 +296,7 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   risk_label_cex <- text_cex
   risk_group_cex <- text_cex
   risk_number_cex <- text_cex
+  cox_annotation_cex <- 0.88
   censor_tick_half_height <- 0.004
   censor_tick_lwd <- 0.45
   inset_censor_tick_half_height <- 0.0018
@@ -292,7 +307,9 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
   inset_axis_x_tick_length <- 0.01
   inset_axis_y_tick_length <- 0.012 * x_limit
   inset_axis_tick_lwd <- 0.6
-  logrank_label <- paste0("Log-rank p = ", study3_format_p(logrank_p))
+  if (is.null(cox_annotation) || !length(cox_annotation)) {
+    cox_annotation <- "Unadjusted Cox HR: NA"
+  }
 
   old_par <- par(no.readonly = TRUE)
   on.exit(par(old_par), add = TRUE)
@@ -365,7 +382,7 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
 	  axis(2, at = seq(0, 1.0, by = 0.2), las = 1, cex.axis = main_axis_cex)
 	  axis(1, at = x_breaks, labels = FALSE, tck = -0.015)
 	  title(
-    main = "Figure 1. Kaplan-Meier Estimates of Time to First Inappropriate ICD Shock by Device Type",
+    main = "Figure 1. Kaplan-Meier Estimates of Inappropriate ICD Shock by Device Type",
     line = 2.5,
     cex.main = text_cex,
     font.main = 2
@@ -457,9 +474,9 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
     text(
       x = inset_x[[1]] + 0.065 * diff(inset_x),
       y = inset_y[[1]] + 0.08 * diff(inset_y),
-      labels = logrank_label,
+      labels = cox_annotation,
       adj = c(0, 0),
-      cex = text_cex,
+      cex = cox_annotation_cex,
       xpd = NA
     )
     axis_x_ticks <- round(seq(0, floor(x_limit / 365.25), by = 2) * 365.25)
@@ -500,11 +517,11 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
       xjust = 1
     )
     text(
-      x = panel_xlim[[1]] + 0.22 * diff(panel_xlim),
-      y = 0.09,
-      labels = logrank_label,
-      adj = c(0, 0),
-      cex = text_cex
+      x = panel_xlim[[1]] + 0.36 * diff(panel_xlim),
+      y = 0.43,
+      labels = cox_annotation,
+      adj = c(0.5, 0.5),
+      cex = cox_annotation_cex
     )
   }
 
@@ -548,11 +565,11 @@ study3_draw_km_with_risk_table <- function(fit, labels, x_limit = 2200,
 
 km_labels <- sub("^device_group=", "", names(km_fit$strata))
 if (!length(km_labels)) km_labels <- levels(factor(dt_final$device_group))
-km_logrank_p <- pchisq(
-  logrank_fit$chisq,
-  df = length(logrank_fit$n) - 1,
-  lower.tail = FALSE
+figure1_cox_unadjusted <- coxph(
+  Surv(t_inapp_shock_or_censor_days, event_inapp_shock) ~ device_group,
+  data = dt_final
 )
+figure1_cox_annotation <- study3_figure1_cox_annotation(figure1_cox_unadjusted)
 
 study3_export_figure1_data(
   fit = km_fit,
@@ -563,10 +580,11 @@ study3_export_figure1_data(
 study3_save_grid(
   draw = function() {
 	    study3_draw_km_with_risk_table(
-	      fit = km_fit,
-	      labels = km_labels,
-	      x_limit = 2200,
-	      logrank_p = km_logrank_p
+      fit = km_fit,
+      labels = km_labels,
+      x_limit = 2200,
+      cox_annotation = figure1_cox_annotation,
+      show_inset = FALSE
 	    )
 	  },
   png_file = study3_output_path("figure_1_km_inapp_shock_by_device_2200d_risk_table.png"),
@@ -583,7 +601,8 @@ study3_draw_km_with_risk_table(
   fit = km_fit,
   labels = km_labels,
   x_limit = 2200,
-  logrank_p = km_logrank_p
+  cox_annotation = figure1_cox_annotation,
+  show_inset = FALSE
 )
 
 
