@@ -256,6 +256,116 @@ fwrite(
 )
 
 
+####### STREAMLINED TABLE 1 — AVAILABLE-CASE DENOMINATORS #######
+
+format_streamlined_mean_sd <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  if (!any(!is.na(x))) return(NA_character_)
+  sprintf("%.2f (%.2f)", mean(x, na.rm = TRUE), sd(x, na.rm = TRUE))
+}
+
+format_streamlined_available_case <- function(x, positive_levels) {
+  x <- trimws(as.character(x))
+  n_available <- sum(!is.na(x))
+  n_positive <- sum(x %in% positive_levels, na.rm = TRUE)
+
+  if (n_available == 0L) return(NA_character_)
+
+  sprintf(
+    "%d/%d (%.1f)",
+    n_positive,
+    n_available,
+    100 * n_positive / n_available
+  )
+}
+
+table1_streamlined_groups <- list(
+  Overall = dt_table1,
+  Dual = dt_table1[device_group == "Dual"],
+  Single = dt_table1[device_group == "Single"]
+)
+
+continuous_table1_specs <- data.table(
+  variable = c("age_icd", "BMI", "LVEF", "eGFR"),
+  label = c(
+    "Age, mean (SD)",
+    "BMI, mean (SD)",
+    "LVEF, mean (SD)",
+    "eGFR, mean (SD)"
+  )
+)
+
+categorical_table1_specs <- list(
+  list("Sex", "Female sex, n/N available (%)", "Female"),
+  list("NYHA", "NYHA III-IV, n/N available (%)", c("III", "IV")),
+  list("AF_atrial_flutter", "AF/atrial flutter, n/N available (%)", "Yes"),
+  list("Diabetes", "Diabetes, n/N available (%)", "Yes"),
+  list("Hypertension", "Hypertension, n/N available (%)", "Yes"),
+  list("Stroke_TIA", "Prior stroke/TIA, n/N available (%)", "Yes"),
+  list("Smoking", "Smoking, n/N available (%)", "Yes"),
+  list("ACE_inhibitor_ARB", "ACE inhibitor/ARB use, n/N available (%)", "Yes"),
+  list("Beta_blockers", "Beta-blocker use, n/N available (%)", "Yes"),
+  list("Anti_arrhythmic_III", "Class III antiarrhythmic use, n/N available (%)", "Yes"),
+  list("Anti_platelet", "Antiplatelet use, n/N available (%)", "Yes"),
+  list("Anti_coagulant", "Anticoagulant use, n/N available (%)", "Yes")
+)
+
+table1_streamlined <- rbindlist(c(
+  list(data.table(
+    Variable = "Total Number (n)",
+    Overall = as.character(nrow(table1_streamlined_groups$Overall)),
+    Dual = as.character(nrow(table1_streamlined_groups$Dual)),
+    Single = as.character(nrow(table1_streamlined_groups$Single))
+  )),
+  lapply(seq_len(nrow(continuous_table1_specs)), function(i) {
+    variable <- continuous_table1_specs$variable[i]
+    summaries <- vapply(
+      table1_streamlined_groups,
+      function(data) format_streamlined_mean_sd(data[[variable]]),
+      character(1)
+    )
+    data.table(
+      Variable = continuous_table1_specs$label[i],
+      Overall = summaries[["Overall"]],
+      Dual = summaries[["Dual"]],
+      Single = summaries[["Single"]]
+    )
+  }),
+  lapply(categorical_table1_specs, function(spec) {
+    summaries <- vapply(
+      table1_streamlined_groups,
+      function(data) {
+        format_streamlined_available_case(data[[spec[[1]]]], spec[[3]])
+      },
+      character(1)
+    )
+    data.table(
+      Variable = spec[[2]],
+      Overall = summaries[["Overall"]],
+      Dual = summaries[["Dual"]],
+      Single = summaries[["Single"]]
+    )
+  })
+), use.names = TRUE)
+
+cat("\nTable 1 (streamlined; available-case denominators):\n")
+print(table1_streamlined)
+
+fwrite(
+  table1_streamlined,
+  study3_output_path("table1_baseline_by_device_streamlined_available_case.csv"),
+  na = "",
+  quote = FALSE
+)
+fwrite(
+  table1_streamlined,
+  study3_output_path("table1_baseline_by_device_streamlined_available_case.tsv"),
+  sep = "\t",
+  na = "",
+  quote = FALSE
+)
+
+
 ####### COHORT 2: DEVICE COMPARISON / INFERENTIAL ANALYSES
 
 dt_analysis <- dt_desc
