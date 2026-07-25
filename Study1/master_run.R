@@ -4,6 +4,7 @@
 #
 # Run from any working directory, for example:
 #   Rscript Study1/master_run.R
+#   Rscript Study1/master_run.R --local
 #   ./Study1/run_study1.sh
 #   Rscript Study1/master_run.R --stage analysis
 #   Rscript Study1/master_run.R --from 3_clean --to 8_primary_cox
@@ -17,6 +18,7 @@ usage <- function(status = 0L) {
     "  Rscript Study1/master_run.R [options]\n\n",
     "Options:\n",
     "  --help                    Show this help text.\n",
+    "  --local                   Use the local PROFID data root rather than the HPC root.\n",
     "  --dry-run                 Print the selected scripts without running them.\n",
     "  --stage <name>            Run one stage: all, preprocessing, analysis, core,\n",
     "                            descriptive, imputation, modeling, sensitivity.\n",
@@ -138,6 +140,7 @@ from_id <- NULL
 to_id <- NULL
 only_ids <- NULL
 dry_run <- FALSE
+local_run <- FALSE
 skip_optional <- FALSE
 continue_on_error <- FALSE
 
@@ -147,6 +150,8 @@ while (i <= length(args)) {
 
   if (arg == "--help" || arg == "-h") {
     usage(0L)
+  } else if (arg == "--local") {
+    local_run <- TRUE
   } else if (arg == "--dry-run") {
     dry_run <- TRUE
   } else if (arg == "--skip-optional") {
@@ -228,6 +233,28 @@ repo_root <- repo_root_from_script()
 old_wd <- getwd()
 setwd(repo_root)
 on.exit(setwd(old_wd), add = TRUE)
+
+output_dir <- file.path(repo_root, "Study1", "outputs")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+run_log_file <- file.path(
+  output_dir,
+  sprintf("master_run_%s.txt", format(Sys.time(), "%Y%m%d_%H%M%S"))
+)
+run_log_connection <- file(run_log_file, open = "wt")
+sink(run_log_connection, split = TRUE)
+on.exit({
+  sink()
+  close(run_log_connection)
+}, add = TRUE)
+
+if (local_run) {
+  Sys.setenv(STUDY1_LOCAL = "true")
+} else {
+  Sys.unsetenv("STUDY1_LOCAL")
+}
+
+study1_paths_file <- file.path(repo_root, "Study1", "study1_paths.R")
+source(study1_paths_file)
 
 repos <- getOption("repos")
 if (is.null(repos) || is.na(repos[["CRAN"]]) || identical(unname(repos[["CRAN"]]), "@CRAN@")) {
@@ -329,7 +356,10 @@ if (length(missing_scripts)) {
 }
 
 cat("Study1 master run\n")
+cat(sprintf("Run log: %s\n", run_log_file))
 cat(sprintf("Repository root: %s\n", repo_root))
+cat(sprintf("Run mode: %s\n", if (local_run) "local" else "HPC"))
+cat(sprintf("Data root: %s\n", profid_data_root()))
 cat(sprintf("R library path: %s\n", r_libs_user))
 cat(sprintf("Selected scripts: %d\n\n", nrow(selected)))
 

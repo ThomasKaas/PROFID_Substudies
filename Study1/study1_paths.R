@@ -33,10 +33,59 @@ study1_repo_root <- function() {
   cwd
 }
 
-profid_data_root <- function() {
+study1_hpc_data_root <- function() {
   Sys.getenv(
     "PROFID_DATA_ROOT",
     unset = "/sc-projects/sc-proj-dhzc-profid/PROFID_Substudies/data"
+  )
+}
+
+study1_local_data_root_candidates <- function() {
+  repo_root <- study1_repo_root()
+  parent_root <- dirname(repo_root)
+
+  unique(c(
+    # The local protected-data checkout is kept outside this analysis
+    # repository. Candidates are ordered from most to least project-specific.
+    file.path(repo_root, "data"),
+    file.path(parent_root, "PROFID_RAW_DATA"),
+    file.path(dirname(parent_root), "PROFID_RAW_DATA")
+  ))
+}
+
+study1_is_local_run <- function() {
+  tolower(Sys.getenv("STUDY1_LOCAL", unset = "")) %in% c("1", "true", "yes")
+}
+
+profid_data_root <- function() {
+  if (!study1_is_local_run()) {
+    return(normalizePath(study1_hpc_data_root(), winslash = "/", mustWork = FALSE))
+  }
+
+  configured_root <- Sys.getenv("PROFID_LOCAL_DATA_ROOT", unset = "")
+  if (nzchar(configured_root)) {
+    if (!dir.exists(file.path(configured_root, "datasets"))) {
+      stop(
+        sprintf("PROFID_LOCAL_DATA_ROOT does not contain datasets/: %s", configured_root),
+        call. = FALSE
+      )
+    }
+    return(normalizePath(configured_root, winslash = "/", mustWork = FALSE))
+  }
+
+  candidates <- study1_local_data_root_candidates()
+  usable <- candidates[dir.exists(file.path(candidates, "datasets"))]
+
+  if (length(usable)) {
+    return(normalizePath(usable[[1]], winslash = "/", mustWork = FALSE))
+  }
+
+  stop(
+    paste(
+      "Could not locate a local PROFID data root containing datasets/.",
+      "Set PROFID_LOCAL_DATA_ROOT or run without --local on the HPC."
+    ),
+    call. = FALSE
   )
 }
 
@@ -59,7 +108,12 @@ profid_data_path <- function(...) {
 }
 
 profid_transfer_path <- function(...) {
-  profid_data_path("Data_Transfer_to_Charite", ...)
+  data_root <- profid_data_root()
+  transfer_dirs <- c("Data_Transfer_to_Charite", "Data Transfer to Charite")
+  available <- transfer_dirs[dir.exists(file.path(data_root, transfer_dirs))]
+  transfer_dir <- if (length(available)) available[[1]] else transfer_dirs[[1]]
+
+  file.path(data_root, transfer_dir, ...)
 }
 
 profid_dataset_path <- function(...) {
