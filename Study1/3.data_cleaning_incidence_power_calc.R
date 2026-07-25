@@ -183,6 +183,16 @@ n_e2 <- sum(is.na(ds_clean$Status_FIS) & !is.na(ds_clean$Time_FIS_days))
 ds_clean[is.na(Status_FIS) & !is.na(Time_FIS_days), Status_FIS := 1L]
 cat(sprintf("E2 - FIS time present, status missing => exposed:   %d\n", n_e2))
 
+# E3: unexposed patients should have no shock timing => set to missing
+# Catches discordant raw records (Status_FIS == 0 with a recorded FIS time)
+# Placeholders written by E1 (Time_FIS_days == Time_death_days) are kept;
+# E6 below re-assigns the censoring time to cleared values
+n_e3 <- sum(ds_clean$Status_FIS == 0L & !is.na(ds_clean$Time_FIS_days) &
+              ds_clean$Time_FIS_days != ds_clean$Time_death_days, na.rm = TRUE)
+ds_clean[Status_FIS == 0L & !is.na(Time_FIS_days) &
+           Time_FIS_days != Time_death_days, Time_FIS_days := NA_real_]
+cat(sprintf("E3 - Unexposed with shock timing => cleared:        %d\n", n_e3))
+
 # E4: exposed but timing unknown => HARD EXCLUSION
 # Cannot place shock in time - exposure status unclassifiable
 # Excluded from all analyses to ensure consistent population

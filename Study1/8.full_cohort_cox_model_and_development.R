@@ -228,6 +228,15 @@ make_td_tmerge <- function(dt, vars_base){
   
   # ========== KEY FIX: PROPER data1 and data2 structure ==========
   
+  # QC assertion: no unexposed patient may carry a shock time before
+  # end of follow-up (tdc below would misclassify them as exposed)
+  n_fis_qc <- dt[!is.na(Status_FIS) & Status_FIS == 0L &
+                   !is.na(Time_FIS_days) &
+                   Time_FIS_days < Time_death_days, .N]
+  if (n_fis_qc > 0)
+    stop(sprintf("QC failure: %d unexposed patients (Status_FIS == 0) have Time_FIS_days < Time_death_days",
+                 n_fis_qc))
+  
   # data1: ID + outcome time/status + baseline covariates
   base_cols <- c("ID", "Time_death_days", "Status_death", vars_base)
   data1 <- dt[, ..base_cols]
@@ -237,13 +246,16 @@ make_td_tmerge <- function(dt, vars_base){
                "Status_FIS", "Time_FIS_days")
   data2 <- dt[, ..d2_cols]
   
+  # Defensive: pass a shock time to tdc() only when a shock actually occurred
+  data2[, Time_FIS_td := fifelse(Status_FIS == 1L, Time_FIS_days, NA_real_)]
+  
   # Create time-dependent dataset using tmerge
   td <- tmerge(
     data1 = data1,                                    # Baseline data
     data2 = data2,                                    # Baseline + exposure vars
     id    = ID,                                       # ID variable
     death = event(Time_death_days, Status_death == 1), # Event indicator
-    FIS_td = tdc(Time_FIS_days)                       # Time-dependent covariate
+    FIS_td = tdc(Time_FIS_td)                         # Time-dependent covariate
   )
   
   # Clean up and format
