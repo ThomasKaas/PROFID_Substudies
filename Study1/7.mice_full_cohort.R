@@ -1283,6 +1283,22 @@ colSums(is.na(complete(imp_full)))
 
 full_after <- complete(imp_full, 1)
 
+master_clean_ids <- as.character(full_data$ID)
+imputed_ids <- as.character(full_after$ID)
+cohort_matches <- !anyNA(master_clean_ids) &&
+  !anyNA(imputed_ids) &&
+  identical(sort(imputed_ids), sort(master_clean_ids))
+
+if (nrow(full_after) != nrow(full_data) ||
+    !cohort_matches) {
+  stop(sprintf(
+    "FATAL: MICE changed the master clean cohort (expected %d rows, found %d; missing IDs: %d; unexpected IDs: %d). Repair the imputation specification; do not remove patients.",
+    nrow(full_data), nrow(full_after),
+    length(setdiff(master_clean_ids, imputed_ids)),
+    length(setdiff(imputed_ids, master_clean_ids))
+  ))
+}
+
 
 
 cat("\n=== NA CHECK AFTER IMPUTATION ===\n")
