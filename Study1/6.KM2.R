@@ -6,7 +6,7 @@
 ###############################################################################
 pkgs <- c(
   "tidyverse","dplyr" ,"survival", "data.table", "mice", "naniar", "grid","gridExtra",
-  "openxlsx", "readxl", "gt", "ggplot2"
+  "openxlsx", "readxl", "gt", "ggplot2", "patchwork", "scales"
 )
 
 invisible(lapply(pkgs, function(p) {
@@ -166,4 +166,180 @@ summaries only.\n",
   d_km[Status_FIS == 1L, .N],
   d_km[Status_FIS == 0L, .N],
   nrow(d_km)
+))
+
+###############################################################################
+
+# KM 2 — EXTENSION (2026-07-26, roadmap task C13):
+# Kaplan-Meier survival curve anchored at the time of first inappropriate
+# ICD shock (t = 0 = shock), followed to death or censoring, among the
+# patients who experienced inappropriate shock.
+#
+# Rationale: the primary time-dependent Cox model assumes a constant hazard
+# multiplier from the moment of shock onward and cannot distinguish a
+# transient early risk spike from a persistent one. With only a handful of
+# deaths among the exposed patients, a formal piecewise (0-30d/31-180d/
+# >180d) Cox model on this subgroup is not reliably estimable. This purely
+# descriptive, within-group curve instead shows the shape of risk after
+# shock (front-loaded vs. flat) without splitting the few events across
+# strata. It has no unexposed comparator and does not itself establish an
+# excess risk versus non-shocked patients — that comparison remains the
+# role of the primary Cox model above.
+#
+# New output (nothing above is overwritten):
+#   - KM_FigC_survival_after_shock.png/.pdf (survival from shock, risk table)
+#   - console: N/events and Supplementary Figure caption text
+
+###############################################################################
+
+d_post_shock <- d_km[
+  Status_FIS == 1L &
+    !is.na(Time_FIS_days) &
+    Time_death_days > Time_FIS_days
+]
+stopifnot(nrow(d_post_shock) > 0)
+d_post_shock[, Time_since_shock_days := Time_death_days - Time_FIS_days]
+
+cat(sprintf("\nPatients with inappropriate shock included in post-shock KM: N = %d\n",
+            nrow(d_post_shock)))
+cat(sprintf("Deaths after shock: %d\n", sum(d_post_shock$Status_death)))
+
+fit_post_shock <- survfit(Surv(Time_since_shock_days, Status_death) ~ 1,
+                          data = d_post_shock)
+
+# ── Risk table, truncated once the risk set thins to < 10 patients ─────────
+# Reported alongside cumulative deaths and cumulative censoring so that a
+# drop in the number at risk can be attributed to death vs. censoring
+# rather than read as death alone. "At risk" is derived as N minus the two
+# cumulative counts (rather than taken from survfit's n.risk) so the three
+# rows always reconcile exactly, including patients censored/dying exactly
+# on a grid day.
+n_death_at_post <- function(t) {
+  sum(d_post_shock$Status_death == 1L & d_post_shock$Time_since_shock_days <= t)
+}
+n_censor_at_post <- function(t) {
+  sum(d_post_shock$Status_death == 0L & d_post_shock$Time_since_shock_days <= t)
+}
+# Nominal grid in days, labelled in years below (180 d -> 0.5 y, 365 d -> 1 y, ...)
+risk_times_days <- c(0, 180, 365, 545, 730, 1095, 1460, 1825, 2190)
+year_label_lookup <- c(`0` = "0", `180` = "0.5", `365` = "1", `545` = "1.5",
+                       `730` = "2", `1095` = "3", `1460` = "4", `1825` = "5",
+                       `2190` = "6")
+risk_df_post <- data.table(
+  time     = risk_times_days,
+  n_death  = vapply(risk_times_days, n_death_at_post, integer(1)),
+  n_censor = vapply(risk_times_days, n_censor_at_post, integer(1))
+)
+risk_df_post[, n_risk := nrow(d_post_shock) - n_death - n_censor]
+stopifnot(all(risk_df_post$n_risk + risk_df_post$n_death + risk_df_post$n_censor
+             == nrow(d_post_shock)))
+max_time_shown <- max(risk_df_post[n_risk >= 10, time])
+risk_df_post <- risk_df_post[time <= max_time_shown]
+risk_long_post <- rbind(
+  risk_df_post[, .(time, row_label = "Number at risk", value = n_risk)],
+  risk_df_post[, .(time, row_label = "Deaths",         value = n_death)],
+  risk_df_post[, .(time, row_label = "Censored",       value = n_censor)]
+)
+risk_long_post[, row_label := factor(
+  row_label, levels = c("Censored", "Deaths", "Number at risk")
+)]
+
+# ── Build KM data frame for ggplot ─────────────────────────────────────────
+km_df_post <- data.table(
+  time  = c(0, fit_post_shock$time),
+  surv  = c(1, fit_post_shock$surv),
+  lower = c(1, fit_post_shock$lower),
+  upper = c(1, fit_post_shock$upper)
+)
+km_df_post <- km_df_post[time <= max_time_shown]
+if (max(km_df_post$time) < max_time_shown) {
+  edge_row <- km_df_post[which.max(time)]
+  edge_row[, time := max_time_shown]
+  km_df_post <- rbind(km_df_post, edge_row)
+}
+
+# ── Main KM plot ────────────────────────────────────────────────────────────
+p_post_main <- ggplot(km_df_post, aes(x = time, y = surv)) +
+  geom_step(aes(y = lower), colour = "black", linewidth = 0.5, linetype = "dashed") +
+  geom_step(aes(y = upper), colour = "black", linewidth = 0.5, linetype = "dashed") +
+  geom_step(colour = "#c0392b", linewidth = 0.9) +
+  scale_x_continuous(
+    breaks = risk_df_post$time,
+    limits = c(0, max_time_shown),
+    expand = c(0, 0)
+  ) +
+  scale_y_continuous(
+    labels = percent_format(accuracy = 1),
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.25),
+    expand = c(0.02, 0)
+  ) +
+  coord_cartesian(xlim = c(0, max_time_shown), clip = "off") +
+  labs(x = NULL, y = "Survival after inappropriate\nICD shock") +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text    = element_text(size = 11, colour = "black"),
+    axis.title.y = element_text(size = 11, margin = margin(r = 8)),
+    axis.text.x  = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line    = element_line(colour = "black")
+  )
+
+# ── Risk table panel (numbers at risk + cumulative deaths + censoring) ─────
+p_post_risk <- ggplot(risk_long_post, aes(x = time, y = row_label, label = value)) +
+  geom_text(size = 3.8, fontface = "plain", colour = "black") +
+  scale_x_continuous(
+    breaks = risk_df_post$time,
+    labels = year_label_lookup[as.character(risk_df_post$time)],
+    limits = c(0, max_time_shown),
+    expand = c(0, 0)
+  ) +
+  scale_y_discrete(expand = c(0.4, 0.4)) +
+  coord_cartesian(xlim = c(0, max_time_shown), clip = "off") +
+  labs(x = "Years since inappropriate ICD shock", y = NULL) +
+  theme_classic(base_size = 12) +
+  theme(
+    axis.text.x  = element_text(size = 11, colour = "black"),
+    axis.title.x = element_text(size = 11, margin = margin(t = 6)),
+    axis.text.y  = element_text(size = 9, colour = "grey30",
+                                hjust = 1, margin = margin(r = 20)),
+    axis.ticks.y = element_blank(),
+    axis.line.y  = element_blank(),
+    axis.line.x  = element_line(colour = "black"),
+    panel.grid   = element_blank()
+  )
+
+# ── Combine with forced alignment via & operator ───────────────────────────
+p_post_final <- p_post_main / p_post_risk +
+  plot_layout(heights = c(5, 1.6)) &
+  theme(plot.margin = margin(5, 15, 5, 15))
+
+# ── Save ───────────────────────────────────────────────────────────────────
+out_post_png <- file.path(OUTDIR, "KM_FigC_survival_after_shock.png")
+out_post_pdf <- file.path(OUTDIR, "KM_FigC_survival_after_shock.pdf")
+
+study1_save_plot(p_post_final, out_post_png, out_post_pdf, width = 9, height = 5.5)
+
+cat(sprintf("\n✓ Saved:\n  %s\n  %s\n", out_post_png, out_post_pdf))
+
+# ── Figure legend text for manuscript (NOT embedded in figure) ─────────────
+cat("\n--- Figure legend (paste into manuscript) ---\n")
+cat(sprintf(
+  "Supplementary Figure S1C. Kaplan-Meier survival curve anchored at the time
+of first inappropriate ICD shock (t = 0), among the N = %d patients who
+experienced inappropriate shock (%d deaths). The x-axis is shown in years;
+follow-up is shown to %.0f days (%.1f years), the point beyond which fewer
+than 10 patients remained at risk. Dashed lines represent 95%% confidence
+intervals; numbers at risk, cumulative deaths, and cumulative censoring
+are shown below the curve so that declines in the number at risk can be
+attributed to death vs. censoring. This descriptive, within-group curve
+illustrates the shape of risk after shock (e.g. front-loaded vs. flat
+decline) and is exploratory given the small number of post-shock deaths.
+It has no unexposed comparator and does not itself establish an excess
+risk of death after shock relative to patients without shock; that
+comparison is addressed by the primary time-dependent Cox model.\n",
+  nrow(d_post_shock),
+  sum(d_post_shock$Status_death),
+  max_time_shown,
+  max_time_shown / 365.25
 ))
