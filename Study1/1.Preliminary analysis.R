@@ -299,7 +299,8 @@ apply_inadmissible_exclusion <- function(df) {
 
 # =============================================================================
 
-# 6) ≤40-day baseline rule (flag + apply + audit)
+# 6) >=40-day eligibility audit (criterion enforced upstream via ICD.csv
+#    curation; this step only verifies that no <=40-day cases remain)
 
 # =============================================================================
 
@@ -377,6 +378,10 @@ apply_40d_rule <- function(df) {
   
   
   
+  # Safeguard only: upstream ICD.csv curation already enforces ICD implantation
+  # >=40 days after the index MI, so no rows are expected to be flagged here.
+  # If any row ever is flagged, its early post-MI baseline measurements are
+  # treated as unreliable (set to NA) -- patients are never excluded.
   vars_40d_all <- c("SBP", "DBP", "CRP", "Troponin_T", "NYHA",
                     
                     "AV_block", "AV_block_II_or_III")
@@ -609,9 +614,9 @@ dc_clean <- res_40d$data
 
 
 
-cat("\n<=40 days flagged:", sum(res_40d$within_40d, na.rm = TRUE),
+cat("\nAudit of upstream >=40-day eligibility -- <=40 days post-MI flagged:", sum(res_40d$within_40d, na.rm = TRUE),
     
-    "out of", nrow(dc_clean), "\n")
+    "out of", nrow(dc_clean), "(expected 0)\n")
 
 cat("Variables affected by 40d rule:", paste(res_40d$affected_vars, collapse = ", "), "\n\n")
 
