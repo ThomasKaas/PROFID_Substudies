@@ -21,7 +21,8 @@ usage <- function(status = 0L) {
     "  --local                   Use the local PROFID data root rather than the HPC root.\n",
     "  --dry-run                 Print the selected scripts without running them.\n",
     "  --stage <name>            Run one stage: all, preprocessing, analysis, core,\n",
-    "                            descriptive, imputation, modeling, sensitivity.\n",
+    "                            descriptive, imputation, modeling, sensitivity,\n",
+    "                            audit.\n",
     "                            Default: all.\n",
     "  --from <step_id>          Start at a named step id.\n",
     "  --to <step_id>            Stop at a named step id.\n",
@@ -77,7 +78,8 @@ pipeline <- data.frame(
     "7_mice",
     "8_primary_cox",
     "9_landmark",
-    "10_fine_gray"
+    "10_fine_gray",
+    "17_registry_audit"
   ),
   stage = c(
     rep("preprocessing", 4),
@@ -87,14 +89,16 @@ pipeline <- data.frame(
     rep("descriptive", 3),
     "imputation",
     "modeling",
-    rep("sensitivity", 2)
+    rep("sensitivity", 2),
+    "audit"
   ),
   optional = c(
     rep(FALSE, 4),
     TRUE,
     rep(FALSE, 4),
     rep(TRUE, 3),
-    rep(FALSE, 4)
+    rep(FALSE, 4),
+    TRUE
   ),
   script = c(
     "Study1/preprocessing_dataset_scripts/eucert_preprocessing.R",
@@ -112,7 +116,8 @@ pipeline <- data.frame(
     "Study1/7.mice_full_cohort.R",
     "Study1/8.full_cohort_cox_model_and_development.R",
     "Study1/9.Landmark_analysis.R",
-    "Study1/10.Fine_gray.R"
+    "Study1/10.Fine_gray.R",
+    "Study1/c17_registry_audit.R"
   ),
   label = c(
     "Preprocess EU-CERT-ICD",
@@ -130,7 +135,8 @@ pipeline <- data.frame(
     "Run full-cohort MICE",
     "Run primary Cox model",
     "Run landmark Cox sensitivity",
-    "Run Fine-Gray sensitivity"
+    "Run Fine-Gray sensitivity",
+    "Run C17 registry-by-registry audit"
   ),
   stringsAsFactors = FALSE
 )
@@ -182,7 +188,7 @@ while (i <= length(args)) {
 }
 
 known_stages <- c("all", "preprocessing", "analysis", "core", "descriptive",
-                  "imputation", "modeling", "sensitivity")
+                  "imputation", "modeling", "sensitivity", "audit")
 if (!stage %in% known_stages) {
   stop(sprintf("Unknown stage '%s'. Known stages: %s",
                stage, paste(known_stages, collapse = ", ")), call. = FALSE)
@@ -202,7 +208,7 @@ if (!is.null(only_ids)) {
     selected <- selected[selected$stage == "preprocessing", , drop = FALSE]
   } else if (stage == "analysis") {
     selected <- selected[selected$stage %in% c("core", "descriptive", "imputation",
-                                              "modeling", "sensitivity"), , drop = FALSE]
+                                              "modeling", "sensitivity", "audit"), , drop = FALSE]
   } else if (stage != "all") {
     selected <- selected[selected$stage == stage, , drop = FALSE]
   }

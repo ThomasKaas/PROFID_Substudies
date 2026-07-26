@@ -4,20 +4,22 @@
 # sensitivity for the exposure coefficient, and a centre-clustering
 # assessment.
 #
-# This is a standalone audit. It does not modify the analysis pipeline
-# (scripts 1-10 or master_run.R) and it produces aggregate-only results: it
-# never exports patient identifiers or patient-level data.
+# This audit does not modify the analysis it audits: it reads the cohort products
+# and the imputed object, replicates the primary model's specification without
+# altering it, and produces aggregate-only results -- it never exports patient
+# identifiers or patient-level data.
 #
-# Because it is standalone, it is also NOT re-run by master_run.R. Sections 6 and 7
-# read the imputed object and replicate the primary model's specification, so both
-# must be re-run after any change to script 7 or script 8. c17_provenance.csv
-# records the inputs of each run so a stale audit can be spotted.
+# It runs as the `17_registry_audit` step of master_run.R (stage "audit", after
+# 10_fine_gray, because sections 6 and 7 consume script 7's imputed object and
+# script 8's adjustment set), and also standalone:
 #
-# Run from the repository root:
 #   Rscript Study1/c17_registry_audit.R
 #
 # An alternative protected data root can be supplied with:
 #   PROFID_LOCAL_DATA_ROOT=/path/to/data Rscript Study1/c17_registry_audit.R
+#
+# c17_provenance.csv records each run's inputs so a stale audit stays detectable
+# even when the audit is run on its own rather than through the pipeline.
 
 suppressPackageStartupMessages({
   library(data.table)
@@ -36,15 +38,27 @@ if (!dir.exists(file.path(repo_root, "Study1"))) {
   stop("Run this audit from the repository root.", call. = FALSE)
 }
 
-data_root <- Sys.getenv("PROFID_LOCAL_DATA_ROOT", unset = "")
-if (!nzchar(data_root)) {
-  data_root <- normalizePath(
-    file.path(repo_root, "..", "..", "PROFID_RAW_DATA"),
-    winslash = "/", mustWork = TRUE
-  )
+# Paths resolve through study1_paths.R, using the same three-way source() fallback
+# as 8.full_cohort_cox_model_and_development.R. This matters for the pipeline: a
+# hardcoded ../../PROFID_RAW_DATA root would fail on the HPC, where master_run.R
+# resolves data through profid_data_root(). Re-sourcing under master_run.R, which
+# has already sourced this file, only redefines the same functions.
+study1_paths_file <- file.path("Study1", "study1_paths.R")
+if (!file.exists(study1_paths_file)) study1_paths_file <- "study1_paths.R"
+if (!file.exists(study1_paths_file)) study1_paths_file <- file.path("..", "study1_paths.R")
+source(study1_paths_file)
+
+# Standalone contract: PROFID_LOCAL_DATA_ROOT on its own selects a local data root.
+# profid_data_root() only consults it when STUDY1_LOCAL is set, so setting it here
+# keeps `PROFID_LOCAL_DATA_ROOT=... Rscript Study1/c17_registry_audit.R` working
+# while leaving `master_run.R --local` / HPC resolution untouched.
+if (nzchar(Sys.getenv("PROFID_LOCAL_DATA_ROOT", unset = "")) &&
+    !nzchar(Sys.getenv("STUDY1_LOCAL", unset = ""))) {
+  Sys.setenv(STUDY1_LOCAL = "true")
 }
 
-out_dir <- file.path(repo_root, "Study1", "outputs", "c17_registry_audit")
+data_root <- profid_data_root()
+out_dir <- file.path(study1_output_root(), "c17_registry_audit")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 numeric_or_na <- function(x) suppressWarnings(as.numeric(x))
@@ -55,8 +69,8 @@ EPS <- 1e-7
 # 1) Load cohort products and per-registry source data
 # ---------------------------------------------------------------------------
 
-merged <- readRDS(file.path(data_root, "derived", "Study1", "FINAL_ICD_COHORT", "icd_merged1.rds"))
-clean <- as.data.table(readRDS(file.path(data_root, "derived", "Study1", "master_clean_dataset1.rds")))
+merged <- readRDS(study1_derived_path("FINAL_ICD_COHORT", "icd_merged1.rds"))
+clean <- as.data.table(readRDS(study1_derived_path("master_clean_dataset1.rds")))
 clean_ids <- as.character(clean$ID)
 
 # Registry sources are read with the inclusion filters of the corresponding
@@ -97,8 +111,8 @@ resolve_age_col <- function(dt, candidates) {
 
 # EU-CERT — mirrors eucert_preprocessing.R (ischaemic; age >= 18; CRT-D excluded;
 # overlap centre Karolinska excluded)
-eu <- fread(file.path(
-  data_root, "datasets", "local", "eu-cert-icd", "data", "original",
+eu <- fread(profid_dataset_path(
+  "local", "eu-cert-icd", "data", "original",
   "registry_data_eu-cert-icd_selection_161019-Data-sheet.csv"
 ))
 eu_n_raw <- nrow(eu)
@@ -124,8 +138,8 @@ eu[, `:=`(
 # from the column name plus the fact that the values are plain 4-digit years
 # (2005-2020) rather than Excel date serials. Verify against the HELIOS dictionary
 # before quoting the implant-year row for HELIOS in the manuscript.
-he_file <- file.path(
-  data_root, "datasets", "local", "helios-rdb", "data", "original",
+he_file <- profid_dataset_path(
+  "local", "helios-rdb", "data", "original",
   "Final_delivery.2021-05-20._Ali EDxlsx.xlsx"
 )
 he <- as.data.table(read.xlsx(he_file, sheet = "target_pop"))
@@ -139,8 +153,8 @@ he[, `:=`(
 )]
 
 # ISRAEL (IRPROCDT = procedure/implant date "Jul 1, 2010"; NCENT = centre)
-isrl <- fread(file.path(
-  data_root, "datasets", "local", "israeli-icd", "data", "original", "ICDALL_20170630.csv"
+isrl <- fread(profid_dataset_path(
+  "local", "israeli-icd", "data", "original", "ICDALL_20170630.csv"
 ))
 isrl_n_raw <- nrow(isrl)
 isrl[, audit_id := paste0("ISRL_", trimws(as.character(ParentID)))]
@@ -158,13 +172,13 @@ isrl[, `:=`(
 )]
 
 # PROSE (no calendar dates in the extract, hence no implant year)
-prose <- fread(file.path(
-  data_root, "datasets", "local", "prose-icd", "data", "original",
+prose <- fread(profid_dataset_path(
+  "local", "prose-icd", "data", "original",
   "FinaltoPROFID_PROSEonlysent_hopkins_prose_study.csv"
 ))
 prose_n_raw <- nrow(prose)
-prose_join <- fread(file.path(
-  data_root, "datasets", "local", "prose-icd", "data", "original",
+prose_join <- fread(profid_dataset_path(
+  "local", "prose-icd", "data", "original",
   "FinaltoPROFID_PROSEonlysent_coenrolled.csv"
 ))
 if (all(c("V1", "V2") %in% names(prose_join))) {
@@ -482,7 +496,7 @@ rhs_primary <- paste("FIS_td +", paste(final_vars, collapse = " + "), "+ strata(
 # selection. If script 8's adjustment set changes (C15 is queued to do exactly
 # that), the copy must change with it, so the two are compared against script 8's
 # own output rather than trusted. This does not alter what is fitted below.
-primary_csv <- file.path(repo_root, "Study1", "outputs", "07_primary_model_strata_DB.csv")
+primary_csv <- study1_output_path("07_primary_model_strata_DB.csv")
 if (file.exists(primary_csv)) {
   pm_terms <- setdiff(fread(primary_csv)$term, "FIS_td")
   pm_vars <- unique(sub("^NYHA[0-9]+$", "NYHA", pm_terms))
@@ -499,7 +513,7 @@ if (file.exists(primary_csv)) {
           "checked against script 8.", call. = FALSE)
 }
 
-mice_path <- file.path(data_root, "derived", "Study1", "Imputed_data", "mice_full_object1.rds")
+mice_path <- study1_derived_path("Imputed_data", "mice_full_object1.rds")
 t_full <- readRDS(mice_path)
 
 # ---------------------------------------------------------------------------
@@ -696,6 +710,7 @@ file_mtime <- function(p) {
 provenance <- data.table(
   item = c(
     "audit_run_time",
+    "data_root",
     "mice_object_path",
     "mice_object_mtime",
     "mice_m_imputations",
@@ -706,11 +721,12 @@ provenance <- data.table(
   ),
   value = c(
     format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+    data_root,
     mice_path,
     file_mtime(mice_path),
     as.character(t_full$m),
-    file_mtime(file.path(data_root, "derived", "Study1", "master_clean_dataset1.rds")),
-    file_mtime(file.path(data_root, "derived", "Study1", "FINAL_ICD_COHORT", "icd_merged1.rds")),
+    file_mtime(study1_derived_path("master_clean_dataset1.rds")),
+    file_mtime(study1_derived_path("FINAL_ICD_COHORT", "icd_merged1.rds")),
     file_mtime(primary_csv),
     paste(final_vars, collapse = " + ")
   )
