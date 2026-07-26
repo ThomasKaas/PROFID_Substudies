@@ -6,11 +6,12 @@
 
 # Description:
 
-#   - Landmark Fine-Gray competing risks analyses at 6, 12, and 24 months
+#   - Original and cohort-adjusted landmark Fine-Gray analyses at 6, 12,
+#     and 24 months
 
 #   - Rubin's rules pooling across 20 MICE imputations
 
-#   - CIF plots per landmark (imp=1)
+#   - Styled conventional 1-KM and Aalen-Johansen curves per landmark (imp=1)
 
 #   - POST-RUN QC summary and Table S2 (cohort derivation for Fine-Gray)
 
@@ -20,7 +21,9 @@
 
 #   - Full cohort only (no train/test split)
 
-#   - DB not included — crr() does not support strata() (secondary analysis)
+#   - The original model is retained without cohort adjustment
+#   - A second model adds fixed DB indicators and cohort-specific censoring
+#     distributions because crr() does not support strata()
 
 #   - NYHA binarised (III-IV=1, I-II=0); consistent with landmark Cox SAP
 
@@ -88,6 +91,8 @@ CIF_IMP <- 1
 
 DAYS_PER_MONTH <- 30.4375
 
+DB_LEVELS <- c("CERT", "HELS", "ISRL", "PRSE")
+
 
 
 # Landmarks in months -> converted to days
@@ -108,7 +113,7 @@ MIN_EVENTS_CAUSE1   <- 2
 
 VAR_TIME   <- "Survival_time"   # months (confirmed)
 
-VAR_STATUS <- "Status"          # 0=alive/censored, 1=appropriate shock, 2=death
+VAR_STATUS <- "Status"          # 0=censored, 1=appropriate shock, 2=non-sudden cardiac death
 
 VAR_FIS    <- "Status_FIS"
 
@@ -125,7 +130,6 @@ VAR_TFIS   <- "Time_FIS_days"   # DAYS (confirmed: 95th pctile >> 120)
 #        binarised inside build_landmark_dt to NYHA_bin (III-IV=1, I-II=0)
 
 COVARS_RAW <- c(
-  
   "Age", "LVEF", "eGFR",
   
   "bin_beta_blockers", "bin_diabetes", "bin_stroke_tia",
@@ -162,9 +166,15 @@ PRETTY_LABELS <- c(
   
   "bin_sex_male"           = "Sex (Male vs Female)",
   
-  "QRS_log1p"              = "QRS duration,log-transformed (per unit)",
-  
-  "NYHA_bin"               = "NYHA class III-IV (vs I-II)"
+  "QRS_log1p"              = "QRS duration, log-transformed (per unit)",
+
+  "NYHA_bin"               = "NYHA class III-IV (vs I-II)",
+
+  "DBHELS"                 = "Cohort: HELIOS (vs EU-CERT-ICD)",
+
+  "DBISRL"                 = "Cohort: ISRAEL-ICD (vs EU-CERT-ICD)",
+
+  "DBPRSE"                 = "Cohort: PROSE-ICD (vs EU-CERT-ICD)"
   
 )
 
@@ -294,13 +304,20 @@ binarise_nyha <- function(x) {
 
 # -------------------------------------------------------------------------
 
-build_landmark_dt <- function(df, L_days) {
+build_landmark_dt <- function(df, L_days, include_cohort = FALSE) {
   
   dt <- as.data.table(copy(df))
   
   
   
-  need <- unique(c(VAR_TIME, VAR_STATUS, VAR_FIS, VAR_TFIS, COVARS_RAW))
+  need <- unique(c(
+    VAR_TIME,
+    VAR_STATUS,
+    VAR_FIS,
+    VAR_TFIS,
+    COVARS_RAW,
+    if (include_cohort) "DB"
+  ))
   
   miss <- setdiff(need, names(dt))
   
@@ -431,6 +448,11 @@ build_landmark_dt <- function(df, L_days) {
   dt[, t_landmark := time_days - L_days]
   
   dt[, Status_fg  := as.integer(get(VAR_STATUS))]  # 0/1/2
+
+  if (include_cohort) {
+    dt[, DB := factor(as.character(DB), levels = DB_LEVELS)]
+    if (anyNA(dt$DB)) stop("Missing or unrecognised DB cohort code.")
+  }
   
   
   
@@ -494,52 +516,95 @@ build_landmark_dt <- function(df, L_days) {
     
   )
   
+  if (include_cohort) keep <- c(keep, "DB")
+
   dt[, ..keep]
   
 }
 
 
 
-# Fine-Gray via cmprsk::crr; return coef + var diagonal
+# Original Fine-Gray fitting function, restored verbatim.
 
 fit_crr_return <- function(dt) {
-  
+
   if (sum(dt$Status_fg == 1L, na.rm = TRUE) < MIN_EVENTS_CAUSE1) return(NULL)
-  
-  
-  
+
+
+
   X <- model.matrix(
-    
+
     ~ FIS_L + Age_10 + LVEF_5 + eGFR_10 +
-      
+
       bin_beta_blockers + bin_diabetes + bin_stroke_tia +
-      
+
       bin_af_atrial_flutter + bin_sex_male +
-      
+
       QRS_log1p + NYHA_bin,   # [NEW]
-    
+
     data = dt
-    
+
   )
-  
+
   if (ncol(X) >= 1 && colnames(X)[1] == "(Intercept)") X <- X[, -1, drop=FALSE]
-  
-  
-  
+
+
+
   fit <- try(cmprsk::crr(
-    
+
     ftime    = dt$t_landmark,
-    
+
     fstatus  = dt$Status_fg,
-    
+
     cov1     = X,
-    
+
     failcode = 1,
-    
+
     cencode  = 0
-    
+
   ), silent = TRUE)
-  
+
+  if (inherits(fit, "try-error")) return(NULL)
+
+
+
+  b     <- fit$coef
+
+  vdiag <- diag(fit$var)
+
+  names(vdiag) <- names(b)
+
+  list(coef = b, vdiag = vdiag)
+
+}
+
+
+
+# Separate cohort-adjusted Fine-Gray fitting function.
+
+fit_crr_return_cohort_adjusted <- function(dt) {
+
+  if (sum(dt$Status_fg == 1L, na.rm = TRUE) < MIN_EVENTS_CAUSE1) return(NULL)
+
+  X <- model.matrix(
+    ~ FIS_L + Age_10 + LVEF_5 + eGFR_10 +
+      bin_beta_blockers + bin_diabetes + bin_stroke_tia +
+      bin_af_atrial_flutter + bin_sex_male +
+      QRS_log1p + NYHA_bin + DB,
+    data = dt
+  )
+
+  if (ncol(X) >= 1 && colnames(X)[1] == "(Intercept)") X <- X[, -1, drop=FALSE]
+
+  fit <- try(cmprsk::crr(
+    ftime = dt$t_landmark,
+    fstatus = dt$Status_fg,
+    cov1 = X,
+    failcode = 1,
+    cencode = 0,
+    cengroup = dt$DB
+  ), silent = TRUE)
+
   if (inherits(fit, "try-error")) return(NULL)
   
   
@@ -626,7 +691,7 @@ make_pooled_table <- function(coef_list, vdiag_list) {
   
   out[term %in% names(PRETTY_LABELS), label := PRETTY_LABELS[term]]
   
-  out[, HR_CI  := sprintf("%.2f (%.2f\u2013%.2f)", HR, CI_low, CI_high)]
+  out[, HR_CI  := sprintf("%.2f (%.2f-%.2f)", HR, CI_low, CI_high)]
   
   out[, p_fmt  := ifelse(p_value < 0.001, "<0.001", sprintf("%.3f", p_value))]
   
@@ -637,8 +702,12 @@ make_pooled_table <- function(coef_list, vdiag_list) {
 
 
 save_table_pdf <- function(tidy_dt, file, title) {
-  
-  tab <- tidy_dt[, .(Variable = label, `sHR (95% CI)` = HR_CI, `p-value` = p_fmt)]
+
+  tab <- tidy_dt[, .(
+    Variable = label,
+    `sHR for cumulative incidence (95% CI)` = HR_CI,
+    `p-value` = p_fmt
+  )]
   
   tg  <- tableGrob(
     
@@ -684,151 +753,294 @@ save_table_pdf <- function(tidy_dt, file, title) {
 
 
 
-save_forest_plot <- function(tidy_dt, title, out_prefix) {
-  
-  dt       <- copy(tidy_dt)
-  
-  CLIP_MAX <- 10
-  
-  
-  
-  dt[, CI_low_plot  := pmax(CI_low,  1 / CLIP_MAX)]
-  
-  dt[, CI_high_plot := pmin(CI_high, CLIP_MAX)]
-  
-  dt[, label_wrapped := sapply(label, function(s)
-    
-    paste(strwrap(s, width = 46), collapse = "\n"))]
-  
-  dt[, label_wrapped := factor(label_wrapped, levels = rev(unique(label_wrapped)))]
-  
-  
-  
-  p <- ggplot(dt, aes(x = HR, y = label_wrapped)) +
-    
-    geom_vline(xintercept = 1, linetype = 2, linewidth = 0.8, color = "grey40") +
-    
-    geom_errorbarh(aes(xmin = CI_low_plot, xmax = CI_high_plot),
-                   
-                   height = 0.18, linewidth = 0.9, color = "grey20") +
-    
-    geom_point(size = 2.8, color = "black") +
-    
-    scale_x_log10(limits = c(1 / CLIP_MAX, CLIP_MAX)) +
-    
-    labs(title = title,
-         
-         x = "Subdistribution hazard ratio (log scale)", y = NULL) +
-    
-    theme_minimal(base_size = 13) +
-    
-    theme(plot.title       = element_text(face = "bold"),
-          
-          axis.text.y      = element_text(size = 11),
-          
-          panel.grid.minor = element_blank())
-  
-  
-  
-  study1_save_plot(
-    p,
-    file.path(OUTDIR, paste0(out_prefix, ".png")),
-    file.path(OUTDIR, paste0(out_prefix, ".pdf")),
-    width = 9.2,
-    height = 6.5,
-    dpi = 350
-  )   # taller for extra covariate rows
-  
+save_finegray_plot <- function(plot, png_file, pdf_file, width, height,
+                               dpi = 350) {
+  unlink(c(png_file, pdf_file))
+
+  ggplot2::ggsave(
+    filename = pdf_file,
+    plot = plot,
+    width = width,
+    height = height,
+    device = grDevices::pdf
+  )
+
+  if (requireNamespace("ragg", quietly = TRUE)) {
+    ggplot2::ggsave(
+      filename = png_file,
+      plot = plot,
+      width = width,
+      height = height,
+      dpi = dpi,
+      device = ragg::agg_png,
+      bg = "white"
+    )
+  } else if (nzchar(Sys.which("gs"))) {
+    gs_status <- system2(
+      Sys.which("gs"),
+      args = c(
+        "-q",
+        "-dSAFER",
+        "-dBATCH",
+        "-dNOPAUSE",
+        sprintf("-r%d", dpi),
+        "-sDEVICE=pngalpha",
+        sprintf("-sOutputFile=%s", shQuote(png_file)),
+        shQuote(pdf_file)
+      )
+    )
+    if (!identical(gs_status, 0L) || !study1_file_ready(png_file)) {
+      stop("Ghostscript failed to render PNG from the verified PDF.")
+    }
+  } else {
+    ggplot2::ggsave(
+      filename = png_file,
+      plot = plot,
+      width = width,
+      height = height,
+      dpi = dpi,
+      device = grDevices::png,
+      bg = "white"
+    )
+  }
+
+  invisible(TRUE)
 }
 
 
 
-# CIF plot (colored + renamed legend)
+save_forest_plot <- function(tidy_dt, title, subtitle, out_prefix) {
+  dt <- copy(tidy_dt)
+  clip_max <- 10
 
-make_cif_plot <- function(dt, title) {
-  
+  dt[, `:=`(
+    CI_low_plot = pmax(CI_low, 1 / clip_max),
+    CI_high_plot = pmin(CI_high, clip_max),
+    estimate_type = ifelse(term == "FIS_L", "Exposure", "Adjustment covariate")
+  )]
+  dt[, label_wrapped := vapply(
+    label,
+    function(s) paste(strwrap(s, width = 46), collapse = "\n"),
+    character(1)
+  )]
+  dt[, label_wrapped := factor(
+    label_wrapped,
+    levels = rev(unique(label_wrapped))
+  )]
+
+  p <- ggplot(dt, aes(x = HR, y = label_wrapped, color = estimate_type)) +
+    geom_vline(
+      xintercept = 1,
+      linetype = "dashed",
+      linewidth = 0.7,
+      color = "#7A7A7A"
+    ) +
+    geom_segment(
+      aes(x = CI_low_plot, xend = CI_high_plot, yend = label_wrapped),
+      linewidth = 1.0,
+      lineend = "round"
+    ) +
+    geom_point(aes(shape = estimate_type), size = 3.2, stroke = 0.9) +
+    scale_x_log10(
+      limits = c(1 / clip_max, clip_max),
+      breaks = c(0.1, 0.25, 0.5, 1, 2, 4, 10)
+    ) +
+    scale_color_manual(values = c(
+      "Exposure" = "#1F4E79",
+      "Adjustment covariate" = "#5B6573"
+    )) +
+    scale_shape_manual(values = c(
+      "Exposure" = 18,
+      "Adjustment covariate" = 16
+    )) +
+    labs(
+      title = title,
+      subtitle = subtitle,
+      x = "sHR for appropriate-shock cumulative incidence (log scale)",
+      y = NULL,
+      color = NULL,
+      shape = NULL,
+      caption = paste(
+        paste0(
+          "Points are pooled estimates; horizontal bars are 95% confidence ",
+          "intervals.\n"
+        ),
+        "The Fine-Gray sHR concerns the cumulative incidence function;\n",
+        "it is not an instantaneous biological hazard ratio."
+      )
+    ) +
+    theme_classic(base_size = 12, base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(face = "bold", size = 15, color = "#172B3A"),
+      plot.subtitle = element_text(
+        size = 10.5,
+        color = "#4A5560",
+        margin = margin(b = 10)
+      ),
+      plot.caption = element_text(
+        size = 8.5,
+        color = "#5B6573",
+        hjust = 0,
+        margin = margin(t = 10)
+      ),
+      axis.title.x = element_text(face = "bold", margin = margin(t = 8)),
+      axis.text.y = element_text(size = 10.5, color = "#252A30"),
+      panel.grid.major.x = element_line(color = "#E2E6EA", linewidth = 0.4),
+      legend.position = "bottom",
+      legend.justification = "left",
+      legend.box.margin = margin(t = 5),
+      plot.margin = margin(12, 16, 12, 12)
+    )
+
+  png_file <- file.path(OUTDIR, paste0(out_prefix, ".png"))
+  pdf_file <- file.path(OUTDIR, paste0(out_prefix, ".pdf"))
+  save_finegray_plot(
+    p,
+    png_file,
+    pdf_file,
+    width = 9.2,
+    height = 7.0,
+    dpi = 350
+  )
+}
+
+
+
+# Landmark curves: conventional 1-KM failure estimates and
+# nonparametric Aalen-Johansen cumulative-incidence estimates.
+
+clean_curve_dt <- function(dt) {
   dt <- as.data.table(copy(dt))
-  
-  dt <- dt[is.finite(t_landmark) & t_landmark >= 0 &
-             
-             !is.na(Status_fg) & !is.na(FIS_L)]
-  
-  if (nrow(dt) == 0) stop("CIF: empty dataset.")
-  
-  
-  
-  ci   <- cmprsk::cuminc(ftime   = dt$t_landmark,
-                         
-                         fstatus = dt$Status_fg,
-                         
-                         group   = dt$FIS_L)
-  
-  nm   <- names(ci)
-  
-  keep <- nm[grepl("^[01] [12]$", nm)]
-  
-  
-  
+  dt <- dt[
+    is.finite(t_landmark) & t_landmark >= 0 &
+      !is.na(Status_fg) & !is.na(FIS_L)
+  ]
+  if (nrow(dt) == 0) stop("Landmark curve dataset is empty.")
+  dt
+}
+
+curve_group_label <- function(x) {
+  ifelse(
+    x == 1L,
+    "Inappropriate ICD shock: Yes",
+    "Inappropriate ICD shock: No"
+  )
+}
+
+curve_event_label <- function(x) {
+  ifelse(
+    x == 1L,
+    "Appropriate shock (Status = 1)",
+    "Non-sudden cardiac death (Status = 2)"
+  )
+}
+
+make_aj_curve_data <- function(dt) {
+  dt <- clean_curve_dt(dt)
+
+  # cuminc() returns nonparametric cumulative-incidence estimates equivalent
+  # to Aalen-Johansen estimates in this competing-risk setting.
+  ci <- cmprsk::cuminc(
+    ftime = dt$t_landmark,
+    fstatus = dt$Status_fg,
+    group = dt$FIS_L
+  )
+  keep <- names(ci)[grepl("^[01] [12]$", names(ci))]
+
   long <- rbindlist(lapply(keep, function(k) {
-    
     parts <- strsplit(k, " ")[[1]]
-    
-    grp   <- as.integer(parts[1])
-    
-    cause <- as.integer(parts[2])
-    
-    obj   <- ci[[k]]
-    
-    data.table(time = obj$time, cif = obj$est, FIS_L = grp, cause = cause)
-    
+    obj <- ci[[k]]
+    data.table(
+      time = obj$time,
+      estimate = obj$est,
+      FIS_L = as.integer(parts[1]),
+      cause = as.integer(parts[2])
+    )
   }), fill = TRUE)
-  
-  
-  
-  long[, Group := ifelse(FIS_L == 1,
-                         
-                         "Inappropriate ICD shock: Yes",
-                         
-                         "Inappropriate ICD shock: No")]
-  
-  long[, Event := ifelse(cause == 1,
-                         
-                         "Appropriate shock (Status=1)",
-                         
-                         "Death (Status=2)")]
-  
-  
-  
-  cols <- c("Inappropriate ICD shock: No"  = "#1f77b4",
-            
-            "Inappropriate ICD shock: Yes" = "#d62728")
-  
-  
-  
-  ggplot(long, aes(x = time, y = cif, color = Group)) +
-    
+
+  long[, `:=`(
+    Group = curve_group_label(FIS_L),
+    Event = curve_event_label(cause)
+  )]
+  long[]
+}
+
+make_km_curve_data <- function(dt) {
+  dt <- clean_curve_dt(dt)
+
+  long <- rbindlist(lapply(c(1L, 2L), function(cause) {
+    fit <- survival::survfit(
+      survival::Surv(t_landmark, Status_fg == cause) ~ FIS_L,
+      data = dt
+    )
+    sf <- summary(fit)
+    data.table(
+      time = sf$time,
+      estimate = 1 - sf$surv,
+      FIS_L = as.integer(sub("^FIS_L=", "", as.character(sf$strata))),
+      cause = cause
+    )
+  }), fill = TRUE)
+
+  baseline <- CJ(FIS_L = c(0L, 1L), cause = c(1L, 2L))[
+    , `:=`(time = 0, estimate = 0)
+  ]
+  long <- rbindlist(list(baseline, long), use.names = TRUE, fill = TRUE)
+  setorder(long, cause, FIS_L, time)
+  long[, `:=`(
+    Group = curve_group_label(FIS_L),
+    Event = curve_event_label(cause)
+  )]
+  long[]
+}
+
+make_landmark_curve_plot <- function(curve_dt, dt, lm_label, method) {
+  method <- match.arg(method, c("km", "aj"))
+
+  group_levels <- c(
+    "Inappropriate ICD shock: No",
+    "Inappropriate ICD shock: Yes"
+  )
+  curve_dt[, Group := factor(Group, levels = group_levels)]
+  curve_dt[, Event := factor(
+    Event,
+    levels = c(
+      "Appropriate shock (Status = 1)",
+      "Non-sudden cardiac death (Status = 2)"
+    )
+  )]
+
+  cols <- c(
+    "Inappropriate ICD shock: No" = "#1f77b4",
+    "Inappropriate ICD shock: Yes" = "#d62728"
+  )
+  plot_title <- if (method == "aj") {
+    sprintf("CIF (Full Cohort) - Landmark %s", lm_label)
+  } else {
+    sprintf("1-KM (Full Cohort) - Landmark %s", lm_label)
+  }
+  y_label <- if (method == "aj") {
+    "Cumulative incidence (CIF)"
+  } else {
+    "1 - Kaplan-Meier estimate"
+  }
+
+  ggplot(curve_dt, aes(x = time, y = estimate, color = Group)) +
     geom_step(linewidth = 1.05) +
-    
     facet_wrap(~ Event, ncol = 1, scales = "free_y") +
-    
     scale_color_manual(values = cols) +
-    
-    labs(title = title,
-         
-         x     = "Time since landmark (days)",
-         
-         y     = "Cumulative incidence (CIF)",
-         
-         color = NULL) +
-    
+    labs(
+      title = plot_title,
+      x = "Time since landmark (days)",
+      y = y_label,
+      color = NULL
+    ) +
     theme_minimal(base_size = 14) +
-    
-    theme(plot.title       = element_text(face = "bold"),
-          
-          legend.position  = "right",
-          
-          panel.grid.minor = element_blank())
-  
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "right",
+      panel.grid.minor = element_blank()
+    )
 }
 
 
@@ -865,21 +1077,43 @@ landmark_summary <- function(d, lm_label, imp_i) {
 
 
 
-pool_fg_full <- function(L_days, lm_label) {
-  
+pool_fg_full <- function(L_days, lm_label, cohort_adjusted = FALSE) {
+
   coef_list  <- list()
-  
+
   vdiag_list <- list()
-  
-  
-  
-  cat(sprintf("  Running Fine-Gray across %d imputations...\n", m_full))
+
+  model_label <- if (cohort_adjusted) {
+    "Cohort-adjusted Fine-Gray model"
+  } else {
+    "Original Fine-Gray model (no cohort adjustment)"
+  }
+
+  output_suffix <- if (cohort_adjusted) {
+    sprintf("cohort_adjusted_%s", lm_label)
+  } else {
+    lm_label
+  }
+
+  fit_function <- if (cohort_adjusted) {
+    fit_crr_return_cohort_adjusted
+  } else {
+    fit_crr_return
+  }
+
+
+
+  cat(sprintf("  Running %s across %d imputations...\n", model_label, m_full))
   
   
   
   for (i in 1:m_full) {
     
-    d <- build_landmark_dt(complete(tt_full, i), L_days)
+    d <- build_landmark_dt(
+      complete(tt_full, i),
+      L_days,
+      include_cohort = cohort_adjusted
+    )
     
     if (nrow(d) == 0) {
       
@@ -895,7 +1129,7 @@ pool_fg_full <- function(L_days, lm_label) {
     
     
     
-    fit_obj <- fit_crr_return(d)
+    fit_obj <- fit_function(d)
     
     if (is.null(fit_obj)) {
       
@@ -929,9 +1163,13 @@ pool_fg_full <- function(L_days, lm_label) {
     
     
     
-    d1   <- build_landmark_dt(complete(tt_full, 1), L_days)
-    
-    fit1 <- fit_crr_return(d1)
+    d1 <- build_landmark_dt(
+      complete(tt_full, 1),
+      L_days,
+      include_cohort = cohort_adjusted
+    )
+
+    fit1 <- fit_function(d1)
     
     
     
@@ -965,7 +1203,7 @@ pool_fg_full <- function(L_days, lm_label) {
     
     res[term %in% names(PRETTY_LABELS), label := PRETTY_LABELS[term]]
     
-    res[, HR_CI := sprintf("%.2f (%.2f\u2013%.2f)", HR, CI_low, CI_high)]
+    res[, HR_CI := sprintf("%.2f (%.2f-%.2f)", HR, CI_low, CI_high)]
     
     res[, p_fmt := ifelse(p_value < 0.001, "<0.001", sprintf("%.3f", p_value))]
     
@@ -988,14 +1226,16 @@ pool_fg_full <- function(L_days, lm_label) {
   
   
   title_tab <- sprintf(
-    
-    "Pooled Fine-Gray (Full Cohort) — Landmark %s (NYHA binary, QRS log1p, m=%d)",
-    
-    lm_label, length(coef_list)
-    
+    "%s: %s landmark (NYHA binary, QRS log1p, m=%d)",
+    model_label,
+    lm_label,
+    length(coef_list)
   )
-  
-  pdf_file <- file.path(OUTDIR, sprintf("FULL_sHR_table_%s.pdf", lm_label))
+
+  pdf_file <- file.path(
+    OUTDIR,
+    sprintf("FULL_sHR_table_%s.pdf", output_suffix)
+  )
   
   
   
@@ -1005,9 +1245,15 @@ pool_fg_full <- function(L_days, lm_label) {
     
     pooled_dt,
     
-    title      = sprintf("Pooled Fine-Gray sHRs (Full Cohort) — %s", lm_label),
-    
-    out_prefix = sprintf("FULL_forest_%s", lm_label)
+    title = sprintf("Fine-Gray estimates: %s landmark", lm_label),
+
+    subtitle = if (cohort_adjusted) {
+      "Adjusted for clinical covariates and cohort; cohort-specific censoring distributions"
+    } else {
+      "Adjusted for clinical covariates; original specification without cohort adjustment"
+    },
+
+    out_prefix = sprintf("FULL_forest_%s", output_suffix)
     
   )
   
@@ -1017,43 +1263,84 @@ pool_fg_full <- function(L_days, lm_label) {
   
   if (nrow(fis) == 1) {
     
-    cat(sprintf("  FIS_L sHR: %s, p=%s\n", fis$HR_CI, fis$p_fmt))
+    cat(sprintf(
+      "  FIS_L sHR for appropriate-shock cumulative incidence: %s, p=%s\n",
+      fis$HR_CI, fis$p_fmt
+    ))
     
   }
   
   cat(sprintf("  Saved table: %s\n", pdf_file))
   
-  invisible(TRUE)
-  
+  invisible(pooled_dt)
+
 }
 
 
 
-# CIF figures from imp=1 of full cohort
+# Conventional 1-KM and nonparametric Aalen-Johansen figures from imp=1.
 
-save_cif_figures_full <- function(L_days, lm_label) {
-  
-  d <- build_landmark_dt(complete(tt_full, CIF_IMP), L_days)
-  
-  if (nrow(d) > 0) {
-    
-    p <- make_cif_plot(d, sprintf("CIF (Full Cohort) — Landmark %s", lm_label))
-    
-    study1_save_plot(
-      p,
-      file.path(OUTDIR, sprintf("FULL_CIF_%s.png", lm_label)),
-      file.path(OUTDIR, sprintf("FULL_CIF_%s.pdf", lm_label)),
-      width = 7.8,
-      height = 7.8,
+save_plot_variants <- function(plot, output_prefixes, width = 7.8, height = 7.8) {
+  for (output_prefix in output_prefixes) {
+    png_file <- file.path(OUTDIR, paste0(output_prefix, ".png"))
+    pdf_file <- file.path(OUTDIR, paste0(output_prefix, ".pdf"))
+    save_finegray_plot(
+      plot,
+      png_file,
+      pdf_file,
+      width = width,
+      height = height,
       dpi = 350
     )
-    
-    cat(sprintf("  Saved CIF: FULL_CIF_%s.png/.pdf\n", lm_label))
-    
+  }
+}
+
+save_landmark_figures_full <- function(L_days, lm_label) {
+
+  d <- build_landmark_dt(complete(tt_full, CIF_IMP), L_days)
+
+  if (nrow(d) > 0) {
+
+    km_plot <- make_landmark_curve_plot(
+      make_km_curve_data(d),
+      d,
+      lm_label,
+      method = "km"
+    )
+    aj_plot <- make_landmark_curve_plot(
+      make_aj_curve_data(d),
+      d,
+      lm_label,
+      method = "aj"
+    )
+
+    save_plot_variants(
+      km_plot,
+      sprintf("FULL_KM_CIF_%s", lm_label)
+    )
+    save_plot_variants(
+      aj_plot,
+      c(
+        sprintf("FULL_AJ_CIF_%s", lm_label),
+        sprintf("FULL_CIF_%s", lm_label)
+      )
+    )
+
+    cat(sprintf(
+      paste0(
+        "  Saved conventional 1-KM curves: FULL_KM_CIF_%s.png/.pdf\n",
+        "  Saved Aalen-Johansen curves: FULL_AJ_CIF_%s.png/.pdf ",
+        "(legacy alias FULL_CIF_%s.png/.pdf)\n"
+      ),
+      lm_label,
+      lm_label,
+      lm_label
+    ))
+
   } else {
-    
-    cat("  CIF: empty dataset — skipped.\n")
-    
+
+    cat("  Landmark curves: empty dataset — skipped.\n")
+
   }
   
 }
@@ -1074,7 +1361,15 @@ cat(sprintf("NA-2:    Missing Status => recoded as censored (0)\n"))
 
 cat(sprintf("QRS:     log1p-transformed inside build_landmark_dt from raw QRS\n"))
 
-cat(sprintf("NYHA:    binarised to III-IV (1) vs I-II (0) inside build_landmark_dt\n\n"))
+cat(sprintf("NYHA:    binarised to III-IV (1) vs I-II (0) inside build_landmark_dt\n"))
+
+cat(sprintf("Models:  original specification retained; cohort-adjusted specification added\n"))
+
+cat(sprintf("Cohort:  adjusted model uses DB indicators and cohort-specific censoring distributions\n"))
+
+cat(sprintf(
+  "sHR:     association with the cumulative incidence function, not an instantaneous biological hazard\n\n"
+))
 
 
 
@@ -1088,9 +1383,11 @@ for (lm_label in names(LANDMARKS_DAYS)) {
   
   
   
-  pool_fg_full(L_days, lm_label)
-  
-  save_cif_figures_full(L_days, lm_label)
+  pool_fg_full(L_days, lm_label, cohort_adjusted = FALSE)
+
+  pool_fg_full(L_days, lm_label, cohort_adjusted = TRUE)
+
+  save_landmark_figures_full(L_days, lm_label)
   
   cat("\n")
   
@@ -1307,7 +1604,7 @@ tryCatch({
         `Exposure group` = ifelse(group == 1L, "Prior inappropriate shock", "No prior inappropriate shock"),
         `N in exposure group` = nrow(d_group),
         `Subsequent appropriate-shock events, n` = sum(d_group$Status_fg == 1L),
-        `Competing deaths, n` = sum(d_group$Status_fg == 2L),
+        `Non-sudden cardiac deaths, n` = sum(d_group$Status_fg == 2L),
         `Follow-up from landmark, median days (IQR)` = sprintf(
           "%.0f (%.0f–%.0f)",
           stats::median(followup),
@@ -1317,7 +1614,7 @@ tryCatch({
         `1-year cumulative incidence of appropriate shock, %` = round(
           100 * cif_at_one_year(d, group, 1L), 1
         ),
-        `1-year cumulative incidence of death, %` = round(
+        `1-year cumulative incidence of non-sudden cardiac death, %` = round(
           100 * cif_at_one_year(d, group, 2L), 1
         )
       )
@@ -1334,7 +1631,10 @@ tryCatch({
       gt::tab_source_note(
         source_note = paste(
           "Read-only reporting summary from imputation 1.",
-          "Appropriate-shock cumulative incidence treats death as the competing event.",
+          paste(
+            "Appropriate-shock cumulative incidence treats non-sudden cardiac",
+            "death (Status = 2) as the competing event."
+          ),
           "Prior appropriate shock is identified from Status = 1 at or before the landmark."
         )
       ),

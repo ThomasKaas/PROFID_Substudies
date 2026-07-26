@@ -514,21 +514,23 @@ Input:
 
 Main steps:
 
-1. Uses `Survival_time` (months, converted with 30.4375 days/month) and `Status` (0 = censored/alive, 1 = appropriate ICD shock = event of interest, 2 = death as competing event).
-2. Landmarks at 183, 365, and 731 days.
+1. Uses `Survival_time` (months, converted with 30.4375 days/month) and `Status` (0 = censored, 1 = appropriate ICD shock = event of interest, 2 = non-sudden cardiac death as competing event).
+2. Landmarks at 183, 365, and 730 days.
 3. Excludes missing/zero `Survival_time`; treats missing `Status` as censored; reclassifies `Time_FIS_days > time_days` as unexposed (Rule E); applies the same landmark restriction and `FIS_L` derivation as script 9.
-4. Fits `cmprsk::crr(..., failcode = 1, cencode = 0)` with the landmark adjustment set, but NYHA binarised and no `strata(DB)` (`crr()` does not support stratification).
-5. Pools across imputations with manual Rubin's rules; falls back to imputation 1 if pooling is infeasible.
-6. CIF plots with `cuminc()` grouped by `FIS_L` from imputation 1.
+4. Retains the original covariate-adjusted `cmprsk::crr(..., failcode = 1, cencode = 0)` model without cohort adjustment and separately fits a cohort-adjusted model with fixed `DB` indicators and cohort-specific censoring-distribution estimation (`cengroup = DB`). Fixed-effect cohort adjustment is used because `crr()` does not support `strata(DB)`.
+5. Pools both specifications across imputations with manual Rubin's rules; falls back to imputation 1 if pooling is infeasible.
+6. From imputation 1, produces conventional `1 − KM` failure curves, which censor the alternate event, and nonparametric Aalen–Johansen cumulative-incidence curves with `cuminc()`. The latter are descriptive curves, not model-based Fine–Gray predictions.
 
 Outputs:
 
-- Per landmark: `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`, `FULL_CIF_<lm>.png/.pdf`
+- Original model per landmark: `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`
+- Cohort-adjusted model per landmark: `FULL_sHR_table_cohort_adjusted_<lm>.pdf`, `FULL_forest_cohort_adjusted_<lm>.png/.pdf`
+- Landmark curves: `FULL_KM_CIF_<lm>.png/.pdf`, `FULL_AJ_CIF_<lm>.png/.pdf`; `FULL_CIF_<lm>` is retained as an alias of the AJ figure
 - `TableS2_FineGray_CohortDerivation.html`
 
 Important distinction:
 
-- The Fine-Gray script uses `Survival_time`/`Status` (appropriate shock vs death), while the Cox/KM analyses use `Time_death_days`/`Status_death` (all-cause mortality). The two endpoint pairs answer different questions and should be documented carefully in any methods write-up.
+- The Fine-Gray script uses `Survival_time`/`Status` (appropriate shock vs non-sudden cardiac death), while the Cox/KM analyses use `Time_death_days`/`Status_death` (all-cause mortality). The two endpoint pairs answer different questions and should be documented carefully in any methods write-up.
 
 ## Key Derived Variables
 
@@ -550,7 +552,7 @@ Landmark-fixed exposure used in scripts 9 and 10: 1 if an inappropriate shock oc
 
 ### `Survival_time` / `Status`
 
-Fine-Gray endpoint pair used only in script 10: `Survival_time` in months; `Status` coded 0 = censored, 1 = appropriate shock, 2 = death.
+Fine-Gray endpoint pair used only in script 10: `Survival_time` in months; `Status` coded 0 = censored, 1 = appropriate shock, 2 = non-sudden cardiac death.
 
 ### `bin_*` and `bin_sex_male`
 
@@ -634,7 +636,7 @@ Primary model outputs (`Study1/outputs/`):
 Sensitivity outputs (`Study1/outputs/`):
 
 - `HR_table_<lm>.pdf`, `forest_<lm>.png/.pdf`, `SUMMARY_Landmark_fullcohort.*`, `LANDMARK_risk_table.*`, `COMPARISON_primary_vs_landmark.*`
-- `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`, `FULL_CIF_<lm>.png/.pdf`, `TableS2_FineGray_CohortDerivation.html`
+- `FULL_sHR_table_<lm>.pdf`, `FULL_forest_<lm>.png/.pdf`, `FULL_sHR_table_cohort_adjusted_<lm>.pdf`, `FULL_forest_cohort_adjusted_<lm>.png/.pdf`, `FULL_KM_CIF_<lm>.png/.pdf`, `FULL_AJ_CIF_<lm>.png/.pdf`, `FULL_CIF_<lm>.png/.pdf`, `TableS2_FineGray_CohortDerivation.html`
 
 ## Quality Control Embedded In Scripts
 
@@ -666,8 +668,8 @@ The following issues are visible from static code inspection:
    - `helios_processing.R` assigns them to a stray `Time_FIS` column instead of `Time_FIS_days`.
    - Downstream rules E1/E6 backfill from `Time_death_days`, so the master cohort is consistent, but registry-level FIS censoring detail is lost.
 
-4. Landmark cutoffs differ slightly between sensitivity scripts.
-   - Script 9 uses 183/365/730 days; script 10 uses 183/365/731 days (30.4375-day months).
+4. Landmark cutoffs align between sensitivity scripts.
+   - Scripts 9 and 10 use 183/365/730 days; script 10 derives these by rounding 30.4375-day months.
 
 5. `Survival_time`/`Status` versus `Time_death_days`/`Status_death`.
    - The Fine-Gray script uses a different endpoint pair (appropriate shock as event of interest) than the rest of the pipeline (all-cause mortality); this must be kept distinct in the methods write-up.
