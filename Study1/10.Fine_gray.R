@@ -1264,11 +1264,85 @@ tryCatch({
     
     
   }
-  
-  
-  
-  
-  
+
+
+
+  # ── C9 supplementary table: landmark event counts and follow-up ─────────
+  # Read-only reporting overlay based on the same imp=1 data used for CIFs.
+  # It does not alter Fine-Gray eligibility, model fitting, or CIF figures.
+  cif_at_one_year <- function(d, group, cause) {
+    ci <- cmprsk::cuminc(
+      ftime = d$t_landmark,
+      fstatus = d$Status_fg,
+      group = d$FIS_L
+    )
+    key <- sprintf("%d %d", group, cause)
+    if (!(key %in% names(ci))) return(NA_real_)
+
+    curve <- ci[[key]]
+    index <- findInterval(365, curve$time)
+    if (index == 0L) return(0)
+    curve$est[[index]]
+  }
+
+  qcr_for_report <- copy(qcr)
+  qcr_for_report[, (VAR_TFIS) := tfis_days]
+
+  c9_finegray_table <- rbindlist(lapply(names(LANDMARKS_DAYS), function(lm_label) {
+    L_days <- unname(LANDMARKS_DAYS[[lm_label]])
+    d <- build_landmark_dt(qcr_for_report, L_days)
+    n_prior_appropriate <- qcr[
+      get(VAR_STATUS) == 1L & time_days <= L_days,
+      .N
+    ]
+
+    rbindlist(lapply(c(0L, 1L), function(group) {
+      d_group <- d[FIS_L == group]
+      followup <- d_group$t_landmark
+      data.table(
+        Landmark = lm_label,
+        `Eligible N` = nrow(d),
+        `Prior inappropriate shock, n` = sum(d$FIS_L == 1L),
+        `Prior appropriate shock excluded, n` = n_prior_appropriate,
+        `Exposure group` = ifelse(group == 1L, "Prior inappropriate shock", "No prior inappropriate shock"),
+        `N in exposure group` = nrow(d_group),
+        `Subsequent appropriate-shock events, n` = sum(d_group$Status_fg == 1L),
+        `Competing deaths, n` = sum(d_group$Status_fg == 2L),
+        `Follow-up from landmark, median days (IQR)` = sprintf(
+          "%.0f (%.0f–%.0f)",
+          stats::median(followup),
+          stats::quantile(followup, 0.25, names = FALSE),
+          stats::quantile(followup, 0.75, names = FALSE)
+        ),
+        `1-year cumulative incidence of appropriate shock, %` = round(
+          100 * cif_at_one_year(d, group, 1L), 1
+        ),
+        `1-year cumulative incidence of death, %` = round(
+          100 * cif_at_one_year(d, group, 2L), 1
+        )
+      )
+    }))
+  }))
+
+  fwrite(c9_finegray_table,
+         file.path(OUTDIR, "TableS7_C9_FineGray_LandmarkEventCounts.csv"))
+  gtsave(
+    gt::gt(c9_finegray_table) |>
+      gt::tab_header(
+        title = "Table S7. Landmark competing-risk event counts and follow-up"
+      ) |>
+      gt::tab_source_note(
+        source_note = paste(
+          "Read-only reporting summary from imputation 1.",
+          "Appropriate-shock cumulative incidence treats death as the competing event.",
+          "Prior appropriate shock is identified from Status = 1 at or before the landmark."
+        )
+      ),
+    filename = file.path(OUTDIR, "TableS7_C9_FineGray_LandmarkEventCounts.html"),
+    inline_css = TRUE
+  )
+  cat("✓ C9 table saved: TableS7_C9_FineGray_LandmarkEventCounts.csv/.html\n")
+
   # ── Per-landmark at-risk table ────────────────────────────────────────────
   cat(sprintf(
     "\n%-8s  %9s  %9s  %9s  %13s  %13s\n",

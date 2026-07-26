@@ -1193,6 +1193,67 @@ if (total_deaths / n_params < 10) {
 }
 
 
+
+# -------------------------------------------------------------------------
+# C9 reporting overlay: post-shock mortality information
+# Read-only summary based on the same imp=1 start-stop data used above.
+# This does not alter the primary model, cohort, or exposure definition.
+# -------------------------------------------------------------------------
+
+post_shock_followup <- td_check[FIS_td == 1,
+  .(post_shock_days = sum(tstop - tstart),
+    death_after_shock = any(death == TRUE)),
+  by = ID]
+
+followup_quantiles <- stats::quantile(
+  post_shock_followup$post_shock_days,
+  probs = c(0.25, 0.50, 0.75),
+  na.rm = TRUE,
+  names = FALSE
+)
+
+c9_mortality_table <- data.table(
+  Metric = c(
+    "Patients with post-shock follow-up, n",
+    "Post-shock person-time, years",
+    "Deaths after inappropriate shock, n",
+    "Post-shock follow-up, median days (IQR)",
+    "Remaining under observation 30 days after shock, n",
+    "Remaining under observation 6 months after shock, n",
+    "Remaining under observation 12 months after shock, n",
+    "Remaining under observation 24 months after shock, n"
+  ),
+  Value = c(
+    nrow(post_shock_followup),
+    round(sum(post_shock_followup$post_shock_days) / 365.25, 1),
+    sum(post_shock_followup$death_after_shock),
+    sprintf("%.0f (%.0f–%.0f)",
+            followup_quantiles[[2]], followup_quantiles[[1]], followup_quantiles[[3]]),
+    sum(post_shock_followup$post_shock_days >= 30),
+    sum(post_shock_followup$post_shock_days >= 183),
+    sum(post_shock_followup$post_shock_days >= 365),
+    sum(post_shock_followup$post_shock_days >= 730)
+  )
+)
+
+fwrite(c9_mortality_table,
+       file.path(OUTDIR, "TableS6_C9_Mortality_PostShockFollowUp.csv"))
+gtsave(
+  gt::gt(c9_mortality_table) |>
+    gt::tab_header(title = "Table S6. Post-shock mortality follow-up") |>
+    gt::tab_source_note(
+      source_note = paste(
+        "Read-only reporting summary from imputation 1.",
+        "Post-shock follow-up is measured from first inappropriate shock",
+        "to death or censoring."
+      )
+    ),
+  filename = file.path(OUTDIR, "TableS6_C9_Mortality_PostShockFollowUp.html"),
+  inline_css = TRUE
+)
+msg("Saved: TableS6_C9_Mortality_PostShockFollowUp.csv/.html")
+
+
 # =========================================================================
 
 # STEP 9: INTERACTION TESTING
