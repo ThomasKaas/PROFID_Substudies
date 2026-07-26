@@ -396,7 +396,7 @@ dt[inappropriate_shock == "yes", Status_FIS := 1L]
 
 
 dt[, Time_FIS_days := NA_real_]
-dt[Status_FIS == 0L, Time_FIS := DAYS2LastQuery.ICD]
+dt[Status_FIS == 0L, Time_FIS_days := DAYS2LastQuery.ICD]
 dt[Status_FIS == 1L, Time_FIS_days := DAYS2_inappropriate_shock.ICD]
 
 
