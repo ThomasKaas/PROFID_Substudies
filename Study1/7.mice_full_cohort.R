@@ -555,6 +555,115 @@ dir.create(DIR_LOG, recursive = TRUE, showWarnings = FALSE)
 
 fwrite(miss_full, file.path(DIR_LOG, "missingness_full1.csv"))
 
+# C16: Missingness must be assessed within registry before relying on a
+# pooled imputation model.  The long file is the auditable diagnostic; the
+# wide file and heat map are presentation aids.  IDs are deliberately
+# excluded from all outputs.
+missingness_by_group <- function(df, group, group_name) {
+  group <- as.character(group)
+  keep <- !is.na(group) & nzchar(group)
+  vars <- setdiff(names(df), c("ID", "DB"))
+
+  rbindlist(lapply(vars, function(v) {
+    x <- df[[v]]
+    data.table(
+      variable = v,
+      group = group[keep],
+      missing = is.na(x[keep])
+    )[, .(
+      n = .N,
+      n_missing = sum(missing),
+      pct_missing = round(100 * mean(missing), 2)
+    ), by = group][, `:=`(variable = v, group_type = group_name)]
+  }), use.names = TRUE)
+}
+
+plot_missingness_matrix <- function(miss_long, title, filename_stub, top_n = 40L) {
+  plot_dt <- copy(miss_long)[
+    , max_missing := max(pct_missing), by = variable
+  ][order(-max_missing, variable)]
+  plot_dt <- plot_dt[variable %in% unique(plot_dt$variable)[seq_len(min(top_n, uniqueN(plot_dt$variable)))]]
+  plot_dt[, variable := factor(variable, levels = rev(unique(variable)))]
+
+  p <- ggplot(plot_dt, aes(x = group, y = variable, fill = pct_missing)) +
+    geom_tile(colour = "white", linewidth = 0.25) +
+    geom_text(aes(label = sprintf("%.1f", pct_missing)), size = 2.5) +
+    scale_fill_gradient(limits = c(0, 100), low = "white", high = "#B2182B",
+                        name = "% missing") +
+    labs(title = title, x = NULL, y = NULL,
+         caption = sprintf("Top %d variables ranked by maximum missingness across groups.", top_n)) +
+    theme_minimal(base_size = 11) +
+    theme(panel.grid = element_blank(),
+          axis.text.y = element_text(size = 7),
+          plot.title = element_text(face = "bold"))
+
+  study1_save_plot(
+    p,
+    file.path(DIR_FIG, paste0(filename_stub, ".png")),
+    file.path(DIR_FIG, paste0(filename_stub, ".pdf")),
+    width = 9,
+    height = max(6, min(14, 0.24 * uniqueN(plot_dt$variable) + 2)),
+    dpi = 300
+  )
+}
+
+miss_by_cohort <- missingness_by_group(full_imp_data, full_imp_data$DB, "cohort")
+miss_by_cohort_wide <- dcast(
+  miss_by_cohort,
+  variable ~ group,
+  value.var = "pct_missing",
+  fill = NA_real_
+)
+fwrite(miss_by_cohort, file.path(DIR_LOG, "missingness_by_variable_cohort_full1.csv"))
+fwrite(miss_by_cohort_wide, file.path(DIR_LOG, "missingness_by_variable_cohort_pct_wide_full1.csv"))
+plot_missingness_matrix(
+  miss_by_cohort,
+  "Missingness by variable and cohort",
+  "missingness_heatmap_variable_by_cohort_FULL"
+)
+
+# Implant era is not otherwise used in Study 1.  Do not infer it from a
+# follow-up or time-since-MI field: only create the requested diagnostic when
+# an explicit implant date/year has been retained in the analysis dataset.
+implant_era_candidates <- c(
+  "implant_year", "icd_implant_year", "implant_date", "icd_implant_date"
+)
+implant_era_var <- intersect(implant_era_candidates, names(full_imp_data))
+if (length(implant_era_var) >= 1L) {
+  implant_era_var <- implant_era_var[[1]]
+  implant_era <- full_imp_data[[implant_era_var]]
+  if (grepl("year$", implant_era_var, ignore.case = TRUE)) {
+    implant_era <- suppressWarnings(as.integer(as.character(implant_era)))
+  } else {
+    implant_era <- suppressWarnings(as.integer(format(as.Date(implant_era), "%Y")))
+  }
+
+  if (sum(!is.na(implant_era)) > 0L) {
+    # Five-year bins are used only for an aggregate diagnostic.
+    era_start <- floor(min(implant_era, na.rm = TRUE) / 5) * 5
+    era_end <- ceiling(max(implant_era, na.rm = TRUE) / 5) * 5
+    era_breaks <- seq(era_start, era_end + 5, by = 5)
+    implant_era_group <- cut(
+      implant_era,
+      breaks = era_breaks,
+      right = FALSE,
+      include.lowest = TRUE,
+      labels = paste0(head(era_breaks, -1), "-", tail(era_breaks, -1) - 1)
+    )
+    miss_by_era <- missingness_by_group(full_imp_data, implant_era_group, "implant_era")
+    fwrite(miss_by_era, file.path(DIR_LOG, "missingness_by_variable_implant_era_full1.csv"))
+    plot_missingness_matrix(
+      miss_by_era,
+      "Missingness by variable and implant era",
+      "missingness_heatmap_variable_by_implant_era_FULL"
+    )
+  } else {
+    warning("Explicit implant-era field found but contains no usable years; era diagnostic not produced.")
+  }
+} else {
+  message("C16: implant-era missingness diagnostic not produced: no explicit implant date/year retained.")
+}
+
 
 
 cat(sprintf("\n  Saved plots to: %s\n", DIR_FIG))

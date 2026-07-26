@@ -282,22 +282,22 @@ msg("Long format: %d rows, %d unique patients, %d deaths",
 # Example 1: Exposed patient (FIS occurred)
 ex_exposed <- dt0[Status_FIS == 1L & !is.na(Time_FIS_days), ID][1]
 if (!is.na(ex_exposed)) {
-  msg("\n=== EXAMPLE 1: Exposed Patient (ID = %s) ===", ex_exposed)
+  msg("\n=== EXAMPLE 1: Exposed patient ===")
   msg("WIDE FORMAT:")
-  print(dt0[ID == ex_exposed, .(ID, Status_FIS, Time_FIS_days, Status_death, Time_death_days)])
+  print(dt0[ID == ex_exposed, .(Status_FIS, Time_FIS_days, Status_death, Time_death_days)])
   msg("\nLONG FORMAT (time-split intervals):")
-  print(td0[ID == ex_exposed, .(ID, tstart, tstop, death, FIS_td)])
+  print(td0[ID == ex_exposed, .(tstart, tstop, death, FIS_td)])
   msg("Interpretation: Patient split into 2 intervals - unexposed (FIS_td=0) before Time_FIS_days, exposed (FIS_td=1) after")
 }
 
 # Example 2: Unexposed patient (no FIS)
 ex_unexposed <- dt0[Status_FIS == 0L, ID][1]
 if (!is.na(ex_unexposed)) {
-  msg("\n=== EXAMPLE 2: Unexposed Patient (ID = %s) ===", ex_unexposed)
+  msg("\n=== EXAMPLE 2: Unexposed patient ===")
   msg("WIDE FORMAT:")
-  print(dt0[ID == ex_unexposed, .(ID, Status_FIS, Time_FIS_days, Status_death, Time_death_days)])
+  print(dt0[ID == ex_unexposed, .(Status_FIS, Time_FIS_days, Status_death, Time_death_days)])
   msg("\nLONG FORMAT (single interval):")
-  print(td0[ID == ex_unexposed, .(ID, tstart, tstop, death, FIS_td)])
+  print(td0[ID == ex_unexposed, .(tstart, tstop, death, FIS_td)])
   msg("Interpretation: Patient has 1 interval - never exposed (FIS_td=0) throughout follow-up")
 }
 
@@ -1155,6 +1155,229 @@ gtsave(
 
 
 msg("Saved: 07_primary_model_strata_DB.csv/.html")
+
+
+# -------------------------------------------------------------------------
+# C16) Missing-data sensitivity analyses
+#
+# All multiple-imputation variants retain the published time-dependent
+# exposure, covariate functional forms, cohort stratification, and m = 20.
+# The reduced models change only the listed covariates; they do not repeat
+# variable selection.  This makes their FIS_td estimates comparable with the
+# primary result.
+# -------------------------------------------------------------------------
+
+msg("\n=== C16: MISSING-DATA SENSITIVITY ANALYSES ===")
+
+fis_result_row <- function(model_name, result, n_imputations, n_patients = NA_integer_,
+                           covariates = NA_character_) {
+  if (is.null(result) || !nrow(result) || !("FIS_td" %in% result$term)) {
+    return(data.table(
+      model = model_name, HR = NA_real_, lower = NA_real_, upper = NA_real_,
+      p.value = NA_real_, n_imputations = n_imputations, n_patients = n_patients,
+      covariates = covariates, status = "model_failed"
+    ))
+  }
+
+  fis <- result[term == "FIS_td"]
+  data.table(
+    model = model_name, HR = fis$HR, lower = fis$lower, upper = fis$upper,
+    p.value = fis$p.value, n_imputations = n_imputations, n_patients = n_patients,
+    covariates = covariates, status = "ok"
+  )
+}
+
+fit_fis_complete_case <- function(dt, vars_base, formula_rhs) {
+  required <- unique(c(
+    "ID", "DB", "Time_death_days", "Status_death", "Status_FIS", "Time_FIS_days",
+    vars_base
+  ))
+  missing_required <- setdiff(required, names(dt))
+  if (length(missing_required)) {
+    warning(sprintf("C16 complete-case model unavailable; missing columns: %s",
+                    paste(missing_required, collapse = ", ")))
+    return(list(result = NULL, n_patients = NA_integer_))
+  }
+
+  cc <- copy(dt)[complete.cases(dt[, ..required])]
+  td <- try(make_td_tmerge(cc, vars_base), silent = TRUE)
+  if (inherits(td, "try-error")) return(list(result = NULL, n_patients = uniqueN(cc$ID)))
+
+  fit <- try(
+    coxph(as.formula(paste("Surv(tstart,tstop,death) ~", formula_rhs)),
+          data = td, ties = "efron"),
+    silent = TRUE
+  )
+  if (inherits(fit, "try-error") || !("FIS_td" %in% names(coef(fit)))) {
+    return(list(result = NULL, n_patients = uniqueN(cc$ID)))
+  }
+
+  beta <- unname(coef(fit)["FIS_td"])
+  se <- sqrt(vcov(fit)["FIS_td", "FIS_td"])
+  list(
+    result = data.table(
+      term = "FIS_td", estimate = beta, se = se, HR = exp(beta),
+      lower = exp(beta - 1.96 * se), upper = exp(beta + 1.96 * se),
+      p.value = 2 * pnorm(abs(beta / se), lower.tail = FALSE)
+    ),
+    n_patients = uniqueN(cc$ID)
+  )
+}
+
+fit_fis_leave_one_cohort_out <- function(mids_obj, omitted_cohort, vars_base, formula_rhs) {
+  betas <- numeric(0)
+  variances <- numeric(0)
+
+  for (i in seq_len(mids_obj$m)) {
+    dt <- standardise_types(as.data.table(complete(mids_obj, i)))
+    dt <- dt[as.character(DB) != omitted_cohort]
+    td <- try(make_td_tmerge(dt, vars_base), silent = TRUE)
+    if (inherits(td, "try-error")) next
+
+    fit <- try(
+      coxph(as.formula(paste("Surv(tstart,tstop,death) ~", formula_rhs)),
+            data = td, ties = "efron"),
+      silent = TRUE
+    )
+    if (inherits(fit, "try-error") || !("FIS_td" %in% names(coef(fit)))) next
+
+    betas <- c(betas, unname(coef(fit)["FIS_td"]))
+    variances <- c(variances, vcov(fit)["FIS_td", "FIS_td"])
+  }
+
+  if (length(betas) < 2L) return(list(result = NULL, n_imputations = length(betas)))
+  pooled <- pool_single_coef(betas, variances)
+  list(
+    result = data.table(
+      term = "FIS_td", estimate = pooled$estimate, se = pooled$se,
+      HR = exp(pooled$estimate), lower = exp(pooled$estimate - 1.96 * pooled$se),
+      upper = exp(pooled$estimate + 1.96 * pooled$se), p.value = pooled$p
+    ),
+    n_imputations = length(betas)
+  )
+}
+
+# Treat QRS_log1p as having the missingness of its raw QRS measurement; it is
+# derived passively after imputation and is absent from mids$data by design.
+raw_primary_data <- standardise_types(as.data.table(copy(t_full$data)))
+covariate_missingness <- vapply(final_vars, function(v) {
+  if (v == "QRS_log1p" && "QRS" %in% names(raw_primary_data)) {
+    mean(is.na(raw_primary_data$QRS))
+  } else if (v %in% names(raw_primary_data)) {
+    mean(is.na(raw_primary_data[[v]]))
+  } else {
+    NA_real_
+  }
+}, numeric(1))
+
+LOW_MODERATE_MISSINGNESS_MAX <- 0.20
+HIGH_MISSINGNESS_MIN <- 0.40
+low_missing_vars <- names(covariate_missingness)[
+  !is.na(covariate_missingness) & covariate_missingness <= LOW_MODERATE_MISSINGNESS_MAX
+]
+high_missing_vars <- names(covariate_missingness)[
+  !is.na(covariate_missingness) & covariate_missingness >= HIGH_MISSINGNESS_MIN
+]
+drop_high_missing_vars <- setdiff(final_vars, high_missing_vars)
+
+rhs_with_strata <- function(covariates) {
+  paste("FIS_td +", paste(covariates, collapse = " + "), "+ strata(DB)")
+}
+
+cc_fit <- fit_fis_complete_case(raw_primary_data, vars_for_td_primary, rhs_primary)
+low_missing_fit <- if (length(low_missing_vars)) {
+  fit_and_pool_all(t_full, unique(c(low_missing_vars, "DB")), rhs_with_strata(low_missing_vars))
+} else NULL
+drop_high_missing_fit <- if (length(drop_high_missing_vars)) {
+  fit_and_pool_all(t_full, unique(c(drop_high_missing_vars, "DB")),
+                   rhs_with_strata(drop_high_missing_vars))
+} else NULL
+
+sensitivity_results <- rbindlist(list(
+  fis_result_row(
+    "Primary (multiple imputation)", final_pooled_primary, t_full$m,
+    uniqueN(raw_primary_data$ID), paste(final_vars, collapse = "; ")
+  ),
+  fis_result_row(
+    "Complete case", cc_fit$result, 1L, cc_fit$n_patients,
+    paste(final_vars, collapse = "; ")
+  ),
+  fis_result_row(
+    sprintf("Reduced covariates (<=%d%% missing)", 100 * LOW_MODERATE_MISSINGNESS_MAX),
+    low_missing_fit, t_full$m, uniqueN(raw_primary_data$ID),
+    paste(low_missing_vars, collapse = "; ")
+  ),
+  fis_result_row(
+    sprintf("Exclude covariates with >=%d%% missing", 100 * HIGH_MISSINGNESS_MIN),
+    drop_high_missing_fit, t_full$m, uniqueN(raw_primary_data$ID),
+    paste(drop_high_missing_vars, collapse = "; ")
+  )
+), use.names = TRUE, fill = TRUE)
+
+cohort_levels <- sort(unique(as.character(raw_primary_data$DB)))
+for (cohort in cohort_levels) {
+  loco_fit <- fit_fis_leave_one_cohort_out(t_full, cohort, vars_for_td_primary, rhs_primary)
+  sensitivity_results <- rbind(
+    sensitivity_results,
+    fis_result_row(
+      paste("Leave out cohort", cohort), loco_fit$result, loco_fit$n_imputations,
+      NA_integer_, paste(final_vars, collapse = "; ")
+    )
+  )
+}
+
+missingness_summary <- data.table(
+  covariate = names(covariate_missingness),
+  pct_missing = round(100 * unname(covariate_missingness), 2),
+  included_in_low_missing_model = names(covariate_missingness) %in% low_missing_vars,
+  excluded_in_high_missing_model = names(covariate_missingness) %in% high_missing_vars
+)
+
+fwrite(sensitivity_results, file.path(OUTDIR, "C16_missing_data_sensitivity_models.csv"))
+fwrite(missingness_summary, file.path(OUTDIR, "C16_primary_covariate_missingness.csv"))
+gtsave(
+  gt::gt(sensitivity_results) |>
+    gt::fmt_number(columns = c(HR, lower, upper), decimals = 2) |>
+    gt::fmt_number(columns = p.value, decimals = 3) |>
+    gt::tab_header(title = "C16. Missing-data sensitivity analyses") |>
+    gt::tab_source_note(
+      source_note = paste(
+        "The multiple-imputation models use the existing 20 imputations.",
+        "All models retain time-dependent FIS and cohort stratification.",
+        "Reduced models use the primary model's fixed covariates without re-selection."
+      )
+    ),
+  filename = file.path(OUTDIR, "C16_missing_data_sensitivity_models.html"),
+  inline_css = TRUE
+)
+
+forest_dt <- sensitivity_results[status == "ok" & is.finite(HR) &
+  is.finite(lower) & is.finite(upper) & lower > 0]
+if (nrow(forest_dt)) {
+  forest_dt[, model := factor(model, levels = rev(model))]
+  c16_forest <- ggplot(forest_dt, aes(y = model, x = HR)) +
+    geom_vline(xintercept = 1, linetype = 2, colour = "grey40") +
+    geom_errorbarh(aes(xmin = lower, xmax = upper), height = 0.2) +
+    geom_point(size = 2.5) +
+    scale_x_log10() +
+    labs(
+      title = "C16. Sensitivity of the inappropriate-shock association",
+      x = "Hazard ratio for all-cause mortality (FIS_td)", y = NULL,
+      caption = "All multiple-imputation analyses use m = 20."
+    ) +
+    theme_minimal(base_size = 11) +
+    theme(plot.title = element_text(face = "bold"), panel.grid.minor = element_blank())
+  study1_save_plot(
+    c16_forest,
+    file.path(OUTDIR, "C16_forest_FIS_td_sensitivity.png"),
+    file.path(OUTDIR, "C16_forest_FIS_td_sensitivity.pdf"),
+    width = 10,
+    height = max(4, 0.55 * nrow(forest_dt) + 2),
+    dpi = 300
+  )
+}
+
+msg("C16 results saved: missingness sensitivity tables and FIS_td forest plot")
 
 
 
