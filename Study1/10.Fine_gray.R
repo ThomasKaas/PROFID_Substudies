@@ -24,7 +24,7 @@
 
 #   - NYHA binarised (III-IV=1, I-II=0); consistent with landmark Cox SAP
 
-#   - Rule E: Time_FIS_days > Survival_time_days => reclassified as unexposed
+#   - Rule E: Time_FIS_days >= Survival_time_days => reclassified as unexposed
 
 #   - Survival_time in MONTHS converted to DAYS (x 30.4375)
 
@@ -280,7 +280,7 @@ binarise_nyha <- function(x) {
 
 #   NA-2: Missing Status => treated as censored (Status = 0)
 
-#   Rule E: Time_FIS_days > Survival_time_days => reclassify as unexposed
+#   Rule E: Time_FIS_days >= Survival_time_days => reclassify as unexposed
 
 #   Landmark filter: only patients surviving beyond landmark enter analysis
 
@@ -376,7 +376,7 @@ build_landmark_dt <- function(df, L_days) {
   
   
   
-  # ── Rule E: tfis_days > time_days => reclassify as unexposed ────────────
+  # ── Rule E: tfis_days >= time_days => reclassify as unexposed ────────────
   
   n_rule_e <- dt[get(VAR_FIS) == 1L &
                    
@@ -384,13 +384,13 @@ build_landmark_dt <- function(df, L_days) {
                    
                    !is.na(time_days) &
                    
-                   tfis_days > time_days, .N]
+                   tfis_days >= time_days, .N]
   
   if (n_rule_e > 0) {
     
     cat(sprintf(
       
-      "    [Rule E] %d exposed patients: Time_FIS_days > Survival_time_days => reclassified as unexposed\n",
+      "    [Rule E] %d exposed patients: Time_FIS_days >= Survival_time_days => reclassified as unexposed\n",
       
       n_rule_e
       
@@ -398,7 +398,7 @@ build_landmark_dt <- function(df, L_days) {
     
     dt[get(VAR_FIS) == 1L & !is.na(tfis_days) & !is.na(time_days) &
          
-         tfis_days > time_days,
+         tfis_days >= time_days,
        
        `:=`(Status_FIS = 0L,
             
@@ -1066,7 +1066,7 @@ save_cif_figures_full <- function(L_days, lm_label) {
 
 cat("=== Fine-Gray Landmark Competing Risks — Full Cohort ===\n")
 
-cat(sprintf("Rule E:  Time_FIS_days > Survival_time_days => reclassified as unexposed\n"))
+cat(sprintf("Rule E:  Time_FIS_days >= Survival_time_days => reclassified as unexposed\n"))
 
 cat(sprintf("NA-1:    Missing/zero Survival_time => excluded\n"))
 
@@ -1136,9 +1136,9 @@ tryCatch({
   # ── Step 4: Rule E — reclassify, not exclude ──────────────────────────────
   n_rule_e <- qcr[get(VAR_FIS) == 1L &
                     !is.na(tfis_days) & !is.na(time_days) &
-                    tfis_days > time_days, .N]
+                    tfis_days >= time_days, .N]
   qcr[get(VAR_FIS) == 1L & !is.na(tfis_days) & !is.na(time_days) &
-        tfis_days > time_days,
+        tfis_days >= time_days,
       `:=`(Status_FIS = 0L, tfis_days = NA_real_)]
   
   # ── Step 5: Ambiguous FIS ─────────────────────────────────────────────────
