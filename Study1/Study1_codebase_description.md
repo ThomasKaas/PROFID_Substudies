@@ -20,7 +20,7 @@ Top-level files in `Study1/` are organised as numbered R scripts plus a preproce
 | `2.Variable_transformation.R` | Log-transforms right-skewed numeric variables and creates SAP age groups. |
 | `3.data_cleaning_incidence_power_calc.R` | Defines the final analytic cohort; produces cohort derivation, incidence, exposure, and power tables. |
 | `4.Table 1 and table S3.R` | Builds Table 1 baseline characteristics and the supplementary missing-data table. |
-| `5.KM1.R` | Descriptive Kaplan-Meier cumulative incidence of time to first inappropriate shock. |
+| `5.KM1.R` | Descriptive Kaplan–Meier failure estimate and Aalen–Johansen cumulative incidence of first inappropriate shock with death as a competing event. |
 | `6.KM2.R` | Descriptive Kaplan-Meier overall survival by ever/never inappropriate shock. |
 | `7.mice_full_cohort.R` | Runs full-cohort MICE imputation (m = 20) with missingness audits. |
 | `8.full_cohort_cox_model_and_development.R` | Develops and fits the primary time-dependent Cox model, diagnostics, interactions, and subgroups. |
@@ -365,12 +365,16 @@ Input:
 Main steps:
 
 1. Restricts to positive `Time_FIS_days`; derives `Time_FIS_years = Time_FIS_days / 365.25`.
-2. Fits `survfit(Surv(Time_FIS_years, Status_FIS) ~ 1)`.
-3. Plots cumulative incidence (1 - KM) of first inappropriate shock over 0-5 years with 95% CI and a risk-table panel; reports cumulative incidence at 1/3/5 years and checks median estimability.
+2. Fits the conventional Kaplan–Meier estimator with deaths censored and reports `1 - KM` as a sensitivity analysis.
+3. Derives a three-state endpoint (censored, first inappropriate shock, competing death before shock) and fits the Aalen–Johansen estimator.
+4. Reports 1/3/5-year estimates with 95% CIs for the KM failure estimate, shock cumulative incidence, and competing-death cumulative incidence; the AJ figure includes numbers at risk and cumulative competing deaths and uses zero-anchored dual y-axes for death (left) and shock (right).
 
 Output:
 
 - `KM_FigA_time_to_FIS_fullcohort.png/.pdf`
+- `KM_Failure_FIS_1_3_5yr.csv`
+- `AJ_FigA_CIF_FIS_fullcohort.png/.pdf`
+- `AJ_CIF_FIS_1_3_5yr.csv`
 
 ### `6.KM2.R`
 
@@ -612,6 +616,9 @@ Descriptive outputs (`Study1/outputs/`):
 - `Table1_baseline.html/.csv/.rds`
 - `Supplementary_Missing_Data.html/.csv`
 - `KM_FigA_time_to_FIS_fullcohort.png/.pdf`
+- `KM_Failure_FIS_1_3_5yr.csv`
+- `AJ_FigA_CIF_FIS_fullcohort.png/.pdf`
+- `AJ_CIF_FIS_1_3_5yr.csv`
 - `KM_FigB_survival_by_shock_fullcohort.png/.pdf`
 - `table_variable_construction_by_dataset.html`
 

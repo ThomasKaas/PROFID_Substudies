@@ -125,7 +125,7 @@ pipeline <- data.frame(
     "Transform variables",
     "Clean final analysis cohort",
     "Create Table 1 and missingness table",
-    "Create KM figure: time to FIS",
+    "Create KM and AJ figures: time to FIS",
     "Create KM figure: survival by shock",
     "Run full-cohort MICE",
     "Run primary Cox model",
