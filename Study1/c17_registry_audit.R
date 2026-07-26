@@ -47,12 +47,6 @@ if (!nzchar(data_root)) {
 out_dir <- file.path(repo_root, "Study1", "outputs", "c17_registry_audit")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-msg <- function(...) cat(sprintf(...), "\n")
-
-as_flag <- function(x, yes = "yes") {
-  tolower(trimws(as.character(x))) %in% yes
-}
-
 numeric_or_na <- function(x) suppressWarnings(as.numeric(x))
 
 EPS <- 1e-7
@@ -63,7 +57,6 @@ EPS <- 1e-7
 
 merged <- readRDS(file.path(data_root, "derived", "Study1", "FINAL_ICD_COHORT", "icd_merged1.rds"))
 clean <- as.data.table(readRDS(file.path(data_root, "derived", "Study1", "master_clean_dataset1.rds")))
-merged_ids <- as.character(merged$ID)
 clean_ids <- as.character(clean$ID)
 
 # Registry sources are read with the inclusion filters of the corresponding
@@ -226,44 +219,65 @@ centre_lookup <- unique(centre_lookup, by = "audit_id")
 
 clean[, DB := as.character(DB)]
 
-cohort_rows <- lapply(c("CERT", "HELS", "ISRL", "PRSE"), function(db) {
-  d <- clean[DB == db]
-  src <- source_registries[[db]]
-  src_included <- src[audit_id %in% d$ID]
+# One row of the audit table. Used for each cohort and for OVERALL, so the two
+# cannot drift apart: `db = NA` means "all cohorts pooled", in which case the
+# source-extract columns are summed across registries and the implant-year columns
+# are left empty (the four registries' implant years are not on a common scale, and
+# PROSE carries no calendar dates at all).
+audit_row <- function(db) {
+  is_overall <- is.na(db)
+  d <- if (is_overall) clean else clean[DB == db]
 
-  # Join-quality assertion: implant-year summaries and centre counts below are
-  # computed from src_included. Without this check a partial ID join would silently
-  # summarise a subset of the analysed cohort.
-  if (nrow(src_included) != nrow(d)) {
-    stop(sprintf(
-      paste0("Cohort %s: %d analysed patients but only %d matched back to the source ",
-             "extract by audit_id. Implant-year and centre columns would be computed ",
-             "on a subset; fix the audit_id construction for this registry."),
-      db, nrow(d), nrow(src_included)
-    ))
+  if (is_overall) {
+    n_src <- sum(vapply(source_registries, nrow, integer(1)))
+    n_raw <- sum(raw_counts)
+    n_merged <- nrow(merged)
+    implant_years <- integer(0)
+    n_centres <- uniqueN(centre_lookup$centre_id)
+  } else {
+    src <- source_registries[[db]]
+    src_included <- src[audit_id %in% d$ID]
+
+    # Join-quality assertion: the implant-year summaries and centre count below are
+    # computed from src_included. Without this check a partial ID join would
+    # silently summarise a subset of the analysed cohort.
+    if (nrow(src_included) != nrow(d)) {
+      stop(sprintf(
+        paste0("Cohort %s: %d analysed patients but only %d matched back to the ",
+               "source extract by audit_id. Implant-year and centre columns would be ",
+               "computed on a subset; fix the audit_id construction for this registry."),
+        db, nrow(d), nrow(src_included)
+      ))
+    }
+
+    n_src <- nrow(src)
+    n_raw <- unname(raw_counts[db])
+    n_merged <- sum(merged$DB == db, na.rm = TRUE)
+    implant_years <- src_included$implant_year[!is.na(src_included$implant_year)]
+    n_centres <- uniqueN(centre_lookup[audit_id %in% d$ID]$centre_id)
   }
 
   fis <- d$Status_FIS == 1L
   fis[is.na(fis)] <- FALSE
-  # Exposed patients must have a non-missing death status, otherwise the
-  # post-shock death count below silently becomes NA.
+  # Exposed patients must have a non-missing death status, otherwise the post-shock
+  # death count silently becomes NA.
   stopifnot(!any(is.na(d$Status_death[fis])))
   post_fis_death <- fis & d$Status_death == 1L &
     !is.na(d$Time_death_days) & !is.na(d$Time_FIS_days) &
     d$Time_death_days >= d$Time_FIS_days
 
-  implant_years <- src_included$implant_year
-  implant_years <- implant_years[!is.na(implant_years)]
+  stat_or_na <- function(f) if (length(implant_years)) f(implant_years) else NA_real_
+  fu_years <- function(f) round(f(d$Time_death_days, na.rm = TRUE) / 365.25, 2)
 
   data.table(
-    cohort = db,
-    n_raw_extract = unname(raw_counts[db]),
-    n_source_after_registry_exclusions = nrow(src),
-    n_merged_master_cohort = sum(merged$DB == db, na.rm = TRUE),
+    cohort = if (is_overall) "OVERALL" else db,
+    n_raw_extract = n_raw,
+    n_source_after_registry_exclusions = n_src,
+    n_merged_master_cohort = n_merged,
     n_included_analysis = nrow(d),
-    implant_year_median = if (length(implant_years)) median(implant_years) else NA_real_,
-    implant_year_min = if (length(implant_years)) min(implant_years) else NA_real_,
-    implant_year_max = if (length(implant_years)) max(implant_years) else NA_real_,
+    implant_year_median = stat_or_na(median),
+    implant_year_min = stat_or_na(min),
+    implant_year_max = stat_or_na(max),
     n_inappropriate_shocks = sum(fis),
     pct_inappropriate_shocks = round(100 * mean(fis), 2),
     n_inappropriate_shock_status_missing = sum(is.na(d$Status_FIS)),
@@ -272,56 +286,22 @@ cohort_rows <- lapply(c("CERT", "HELS", "ISRL", "PRSE"), function(db) {
     # (0 = censored, 1 = appropriate shock, 2 = non-sudden cardiac death), so this
     # is not "patients who ever had an appropriate shock": a patient whose first
     # event was a non-sudden cardiac death is coded 2 and excluded here. The
-    # denominator for the percentage excludes patients with `Status` missing,
-    # unlike the inappropriate-shock and death percentages above/below, which use
-    # the full cohort.
+    # percentage's denominator excludes patients with `Status` missing, unlike the
+    # inappropriate-shock and death percentages, which are over the full cohort.
     n_first_event_appropriate_shock = sum(d$Status == 1L, na.rm = TRUE),
     pct_first_event_appropriate_shock =
       round(100 * sum(d$Status == 1L, na.rm = TRUE) / sum(!is.na(d$Status)), 2),
     n_appropriate_shock_status_missing = sum(is.na(d$Status)),
     n_deaths = sum(d$Status_death == 1L, na.rm = TRUE),
     pct_deaths = round(100 * mean(d$Status_death == 1L, na.rm = TRUE), 2),
-    followup_years_median = round(median(d$Time_death_days, na.rm = TRUE) / 365.25, 2),
-    followup_years_min = round(min(d$Time_death_days, na.rm = TRUE) / 365.25, 2),
-    followup_years_max = round(max(d$Time_death_days, na.rm = TRUE) / 365.25, 2),
-    n_centres_identified = uniqueN(centre_lookup[audit_id %in% d$ID]$centre_id)
+    followup_years_median = fu_years(median),
+    followup_years_min = fu_years(min),
+    followup_years_max = fu_years(max),
+    n_centres_identified = n_centres
   )
-})
+}
 
-overall <- clean[, {
-  fis <- Status_FIS == 1L
-  fis[is.na(fis)] <- FALSE
-  stopifnot(!any(is.na(Status_death[fis])))
-  .(
-    cohort = "OVERALL",
-    n_raw_extract = sum(raw_counts),
-    n_source_after_registry_exclusions = sum(vapply(source_registries, nrow, integer(1))),
-    n_merged_master_cohort = nrow(merged),
-    n_included_analysis = .N,
-    implant_year_median = NA_real_,
-    implant_year_min = NA_real_,
-    implant_year_max = NA_real_,
-    n_inappropriate_shocks = sum(fis),
-    pct_inappropriate_shocks = round(100 * mean(fis), 2),
-    n_inappropriate_shock_status_missing = sum(is.na(Status_FIS)),
-    n_post_shock_deaths = sum(fis & Status_death == 1L &
-                                !is.na(Time_death_days) & !is.na(Time_FIS_days) &
-                                Time_death_days >= Time_FIS_days),
-    # See the per-cohort block above: competing-risks first-event coding.
-    n_first_event_appropriate_shock = sum(Status == 1L, na.rm = TRUE),
-    pct_first_event_appropriate_shock =
-      round(100 * sum(Status == 1L, na.rm = TRUE) / sum(!is.na(Status)), 2),
-    n_appropriate_shock_status_missing = sum(is.na(Status)),
-    n_deaths = sum(Status_death == 1L, na.rm = TRUE),
-    pct_deaths = round(100 * mean(Status_death == 1L, na.rm = TRUE), 2),
-    followup_years_median = round(median(Time_death_days, na.rm = TRUE) / 365.25, 2),
-    followup_years_min = round(min(Time_death_days, na.rm = TRUE) / 365.25, 2),
-    followup_years_max = round(max(Time_death_days, na.rm = TRUE) / 365.25, 2),
-    n_centres_identified = uniqueN(centre_lookup$centre_id)
-  )
-}]
-
-cohort_audit <- rbindlist(c(cohort_rows, list(overall)))
+cohort_audit <- rbindlist(lapply(c("CERT", "HELS", "ISRL", "PRSE", NA), audit_row))
 fwrite(cohort_audit, file.path(out_dir, "c17_cohort_audit_table.csv"))
 
 # Exclusion ladder backing the n_source_after_registry_exclusions column, so the
@@ -348,21 +328,20 @@ primary_covariates <- c(
   bin_stroke_tia = "bin_stroke_tia"
 )
 
-missingness <- rbindlist(lapply(c("CERT", "HELS", "ISRL", "PRSE", "OVERALL"), function(db) {
-  d <- if (db == "OVERALL") clean else clean[DB == db]
-  rbindlist(lapply(names(primary_covariates), function(cv) {
-    col <- primary_covariates[[cv]]
-    n_miss <- if (col %in% names(d)) sum(is.na(d[[col]])) else NA_integer_
-    data.table(
-      cohort = db,
-      model_covariate = cv,
-      source_column_checked = col,
-      n = nrow(d),
-      n_missing = n_miss,
-      pct_missing = if (is.na(n_miss)) NA_real_ else round(100 * n_miss / nrow(d), 2)
-    )
-  }))
-}))
+# Every model covariate is checked in every cohort, so the grid is built directly
+# rather than by nesting two lapply()s.
+missingness <- CJ(
+  cohort = c("CERT", "HELS", "ISRL", "PRSE", "OVERALL"),
+  model_covariate = names(primary_covariates),
+  sorted = FALSE
+)
+missingness[, source_column_checked := unname(primary_covariates[model_covariate])]
+missingness[, c("n", "n_missing") := {
+  d <- if (.BY$cohort == "OVERALL") clean else clean[DB == .BY$cohort]
+  col <- source_column_checked
+  .(nrow(d), if (col %in% names(d)) sum(is.na(d[[col]])) else NA_integer_)
+}, by = .(cohort, model_covariate)]
+missingness[, pct_missing := round(100 * n_missing / n, 2)]
 fwrite(missingness, file.path(out_dir, "c17_covariate_missingness_by_cohort.csv"))
 
 # ---------------------------------------------------------------------------
@@ -531,6 +510,8 @@ t_full <- readRDS(mice_path)
 # Rubin's rules. strata(DB) is retained; with one cohort omitted it simply
 # stratifies on the remaining cohorts.
 
+# Returns one row whether or not the fit succeeded, so the caller does not have to
+# unpack a NULL column by column. omit_cohort = NA fits the full cohort.
 fit_fis_pooled <- function(mids_obj, formula_rhs, omit_cohort = NA_character_) {
   betas <- numeric(0)
   variances <- numeric(0)
@@ -549,36 +530,28 @@ fit_fis_pooled <- function(mids_obj, formula_rhs, omit_cohort = NA_character_) {
     variances <- c(variances, vcov(fit)["FIS_td", "FIS_td"])
   }
 
-  if (length(betas) < 2L) return(NULL)
-  pooled <- pool_single_coef(betas, variances)
-  list(model_based = result_row(pooled$estimate, pooled$se),
-       n_imputations = length(betas))
-}
-
-loco_results <- list()
-
-full_fit <- fit_fis_pooled(t_full, rhs_primary)
-loco_results[["Full cohort (primary model)"]] <- data.table(
-  analysis = "Full cohort (primary model)",
-  omitted_cohort = NA_character_,
-  n_imputations = full_fit$n_imputations,
-  full_fit$model_based[, .(HR, lower, upper, p.value)]
-)
-
-for (cohort in sort(unique(as.character(clean$DB)))) {
-  fit <- fit_fis_pooled(t_full, rhs_primary, omit_cohort = cohort)
-  loco_results[[cohort]] <- data.table(
-    analysis = paste("Leave out cohort", cohort),
-    omitted_cohort = cohort,
-    n_imputations = if (is.null(fit)) 0L else fit$n_imputations,
-    HR = if (is.null(fit)) NA_real_ else fit$model_based$HR,
-    lower = if (is.null(fit)) NA_real_ else fit$model_based$lower,
-    upper = if (is.null(fit)) NA_real_ else fit$model_based$upper,
-    p.value = if (is.null(fit)) NA_real_ else fit$model_based$p.value
+  head <- data.table(
+    analysis = if (is.na(omit_cohort)) {
+      "Full cohort (primary model)"
+    } else {
+      paste("Leave out cohort", omit_cohort)
+    },
+    omitted_cohort = omit_cohort,
+    n_imputations = length(betas)
   )
+
+  if (length(betas) < 2L) {
+    return(cbind(head, data.table(HR = NA_real_, lower = NA_real_,
+                                  upper = NA_real_, p.value = NA_real_)))
+  }
+  pooled <- pool_single_coef(betas, variances)
+  cbind(head, result_row(pooled$estimate, pooled$se)[, .(HR, lower, upper, p.value)])
 }
 
-loco_table <- rbindlist(loco_results, fill = TRUE)
+loco_table <- rbindlist(lapply(
+  c(NA_character_, sort(unique(as.character(clean$DB)))),
+  function(omit) fit_fis_pooled(t_full, rhs_primary, omit_cohort = omit)
+), fill = TRUE)
 fwrite(loco_table, file.path(out_dir, "c17_leave_one_cohort_out.csv"))
 
 # ---------------------------------------------------------------------------
