@@ -842,31 +842,97 @@ gtsave(
 
 
 # -------------------------------------------------------------------------
-# 5) STEP 6: Assumptions 
+# 5b) Define the PRIMARY model formula (NYHA as covariate + strata(DB))
+#     Defined here (ahead of Step 7) so Step 6 can run its PH diagnostics
+#     on the model that is actually published, instead of on rhs_final.
+#     Step 7 reuses these same objects unchanged.
 # -------------------------------------------------------------------------
 
-dt1 <- standardise_types(as.data.table(complete(t_full, 1)))
-td1 <- make_td_tmerge(dt1, final_vars)
-fit1 <- coxph(as.formula(paste("Surv(tstart,tstop,death) ~", rhs_final)), 
-              data=td1, ties="efron")
+# DB must be in vars_base so tmerge can pass it to strata(DB)
+vars_for_td_primary <- unique(c(final_vars, "DB"))
 
-# PH assumption
-ph <- cox.zph(fit1)
+rhs_primary <- paste(
+  "FIS_td +",
+  paste(final_vars, collapse = " + "),
+  "+ strata(DB)"
+)
+
+msg("Primary model formula: Surv(tstart,tstop,death) ~ %s", rhs_primary)
+
+
+# -------------------------------------------------------------------------
+# 5) STEP 6: Assumptions
+# -------------------------------------------------------------------------
+
+# PH assumption — tested on the model that is actually published
+# (rhs_primary, stratified by DB), across all m imputations of t_full.
+# (Previously this tested rhs_final, without strata(DB), on imputation 1
+# only — a different model from the one reported in Table 2.)
+ph_fits <- list()
+for (i in 1:t_full$m) {
+  dt_i  <- standardise_types(as.data.table(complete(t_full, i)))
+  td_i  <- make_td_tmerge(dt_i, vars_for_td_primary)
+  fit_i <- try(
+    coxph(as.formula(paste("Surv(tstart,tstop,death) ~", rhs_primary)),
+          data = td_i, ties = "efron"),
+    silent = TRUE
+  )
+  if (!inherits(fit_i, "try-error")) ph_fits[[length(ph_fits) + 1]] <- fit_i
+}
+msg("PH check: fitted primary (stratified) model in %d/%d imputations",
+    length(ph_fits), t_full$m)
+
+ph1 <- cox.zph(ph_fits[[1]])  # kept only for the diagnostic plot below
+
+ph_tables <- lapply(ph_fits, function(fm) as.data.frame(cox.zph(fm)$table))
+ph_terms  <- rownames(ph_tables[[1]])
+ph_pvals  <- sapply(ph_tables, function(tb) tb[ph_terms, "p"])
+rownames(ph_pvals) <- ph_terms
+colnames(ph_pvals) <- paste0("imp", seq_len(ncol(ph_pvals)))
+
+ph_summary <- data.table(
+  term           = ph_terms,
+  n_imputations  = ncol(ph_pvals),
+  min_p          = apply(ph_pvals, 1, min, na.rm = TRUE),
+  median_p       = apply(ph_pvals, 1, median, na.rm = TRUE),
+  max_p          = apply(ph_pvals, 1, max, na.rm = TRUE),
+  prop_p_lt_0.05 = apply(ph_pvals, 1, function(x) mean(x < 0.05, na.rm = TRUE))
+)
+
+fwrite(ph_summary, file.path(OUTDIR, "05_ph_test_primary_model_across_imputations.csv"))
+fwrite(as.data.table(ph_pvals, keep.rownames = "term"),
+       file.path(OUTDIR, "05_ph_test_primary_model_pvals_by_imputation.csv"))
+
 sink(file.path(OUTDIR, "05_ph_test.txt"))
-print(ph)
+cat("PH assumption check for the PRIMARY model (rhs_primary, strata(DB)),\n")
+cat(sprintf("summarised across all %d imputations of t_full.\n\n", t_full$m))
+cat("Formula: Surv(tstart,tstop,death) ~", rhs_primary, "\n\n")
+print(ph_summary)
+cat("\nPer-imputation Schoenfeld p-values:\n")
+print(ph_pvals)
+cat("\nCAVEAT: FIS_td (prior inappropriate ICD shock) accrued only 13 exposed\n")
+cat("deaths during follow-up. A PH test for this term has very low power to\n")
+cat("detect a true time-varying effect at that event count. A non-significant\n")
+cat("result here should be read as inconclusive, not as evidence that the PH\n")
+cat("assumption holds for the exposure effect, and should not be presented as\n")
+cat("reassurance.\n")
 sink()
 
 pdf(file.path(OUTDIR, "05_ph_plots.pdf"), width=12, height=10)
-plot(ph)
+plot(ph1)
 dev.off()
 
-ph_violations <- which(ph$table[,"p"] < 0.05)
+ph_violations <- ph_summary[term != "GLOBAL" & prop_p_lt_0.05 >= 0.5, term]
 if (length(ph_violations) > 0) {
-  msg("WARNING: PH assumption violated for: %s", 
-      paste(rownames(ph$table)[ph_violations], collapse=", "))
+  msg("WARNING: PH assumption violated (p<0.05 in >=50%% of imputations) for: %s",
+      paste(ph_violations, collapse=", "))
 } else {
-  msg("PH assumption satisfied for all variables")
+  msg("PH assumption satisfied for all variables in a majority of imputations (primary, stratified model)")
 }
+msg("NOTE: FIS_td has only 13 exposed deaths; a non-significant PH test for this term is near-uninformative and should not be presented as reassurance.")
+
+dt1 <- standardise_types(as.data.table(complete(t_full, 1)))
+td1 <- make_td_tmerge(dt1, final_vars)
 
 # Linearity
 cont_vars <- c("Age","LVEF","eGFR","Haemoglobin","SBP","BMI","HR","CRP_log1p","QRS_log1p")
@@ -931,11 +997,11 @@ if (length(cont_in_model) > 0) {
 
 #    Rationale:
 
-#    - PH assumption checked in Step 6 — not violated for any covariate
+#    - PH assumption checked in Step 6, on this exact formula (rhs_primary,
+#      stratified by DB), pooled across all imputations — see
+#      05_ph_test_primary_model_across_imputations.csv for results
 
-#    - NYHA not violating PH (Schoenfeld p=0.12, GLOBAL p=0.38)
-
-#      => retained as regular covariate, HR reported in Table 2
+#      => NYHA retained as regular covariate, HR reported in Table 2
 
 #    - DB (cohort) stratified to account for between-cohort heterogeneity
 
@@ -943,33 +1009,14 @@ if (length(cont_in_model) > 0) {
 
 #      intensity) — no HR estimated for DB in primary model
 
+#    - rhs_primary / vars_for_td_primary are defined once, in Step 5b
+#      above, and reused here unchanged
+
 # -------------------------------------------------------------------------
 
 
 
 msg("\n=== STEP 7: PRIMARY MODEL: NYHA covariate + strata(DB) ===")
-
-
-
-# DB must be in vars_base so tmerge can pass it to strata(DB)
-
-vars_for_td_primary <- unique(c(final_vars, "DB"))
-
-
-
-rhs_primary <- paste(
-  
-  "FIS_td +",
-  
-  paste(final_vars, collapse = " + "),
-  
-  "+ strata(DB)"
-  
-)
-
-
-
-msg("Primary model formula: Surv(tstart,tstop,death) ~ %s", rhs_primary)
 
 
 
