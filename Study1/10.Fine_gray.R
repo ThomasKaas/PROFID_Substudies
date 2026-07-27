@@ -1429,6 +1429,7 @@ tryCatch({
   # ── Step 3: Time conversion ───────────────────────────────────────────────
   qcr[, time_days := as.numeric(get(VAR_TIME)) * DAYS_PER_MONTH]
   qcr[, tfis_days := as.numeric(get(VAR_TFIS))]
+  qcr_pre_rule_e <- copy(qcr)
   
   # ── Step 4: Rule E — reclassify, not exclude ──────────────────────────────
   n_rule_e <- qcr[get(VAR_FIS) == 1L &
@@ -1441,6 +1442,34 @@ tryCatch({
   # ── Step 5: Ambiguous FIS ─────────────────────────────────────────────────
   n_ambig  <- qcr[get(VAR_FIS) == 1L & is.na(tfis_days), .N]
   n_exposed <- qcr[get(VAR_FIS) == 1L & !is.na(tfis_days), .N]
+
+  # ── C5 audit: same-day FIS versus the secondary endpoint ───────────────
+  # Counts are taken before Rule E, among patients eligible at each landmark.
+  # Survival time and exposure are not imputed, so imp=1 is sufficient for
+  # this aggregate-only audit. Rule E then reclassifies these ties as
+  # unexposed; no ordering is inferred from same-day records.
+  c5_same_day_audit <- rbindlist(lapply(names(LANDMARKS_DAYS), function(lm_label) {
+    L_days <- unname(LANDMARKS_DAYS[[lm_label]])
+    eligible <- qcr_pre_rule_e[
+      get(VAR_FIS) == 1L & !is.na(tfis_days) & !is.na(time_days) &
+        time_days > L_days
+    ]
+
+    n_same_day <- eligible[tfis_days == time_days, .N]
+    n_after    <- eligible[tfis_days > time_days, .N]
+
+    data.table(
+      Landmark = lm_label,
+      Landmark_days = L_days,
+      N_same_day_FIS_secondary_endpoint = n_same_day,
+      N_FIS_after_secondary_endpoint = n_after,
+      N_FIS_at_or_after_secondary_endpoint = n_same_day + n_after
+    )
+  }))
+  fwrite(c5_same_day_audit,
+         file.path(OUTDIR, "C5_same_day_FIS_secondary_endpoint_audit.csv"))
+  cat("✓ C5 same-day FIS audit saved: C5_same_day_FIS_secondary_endpoint_audit.csv\n")
+  print(c5_same_day_audit)
   
   # ── Print full-cohort summary ─────────────────────────────────────────────
   cat(sprintf("\n%-50s %6d\n", "Full imputed cohort (imp=1):",         N_total))
@@ -1480,7 +1509,7 @@ tryCatch({
         
         "Missing outcome status but valid survival time",
         
-        "First inappropriate shock recorded after end of survival time",
+        "First inappropriate shock recorded at or after end of survival time",
         
         "Valid exposed patients available for Fine-Gray landmark analyses"
         
@@ -1496,7 +1525,7 @@ tryCatch({
         
         "Treated as censored and retained",
         
-        "Reclassified as unexposed and retained \u2014 shock could not be placed within observation window",
+        "Reclassified as unexposed and retained \u2014 shock was not recorded before the secondary endpoint",
         
         "Final exposed count used in all Fine-Gray models"
         
@@ -1536,7 +1565,7 @@ tryCatch({
           
           " differs from the 67 exposed patients in the primary Cox analysis because ", n_rule_e,
           
-          " patients had their first inappropriate shock recorded beyond their survival time and were therefore reclassified as unexposed. ",
+          " patients had their first inappropriate shock recorded at or beyond their survival time and were therefore reclassified as unexposed. ",
           
           "Counts are based on the first imputed dataset; minor variation across imputations is possible due to covariate imputation, ",
           
@@ -1561,8 +1590,6 @@ tryCatch({
     
     
   }
-
-
 
   # ── C9 supplementary table: landmark event counts and follow-up ─────────
   # Read-only reporting overlay based on the same imp=1 data used for CIFs.

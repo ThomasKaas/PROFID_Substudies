@@ -236,6 +236,19 @@ make_td_tmerge <- function(dt, vars_base){
   if (n_fis_qc > 0)
     stop(sprintf("QC failure: %d unexposed patients (Status_FIS == 0) have Time_FIS_days < Time_death_days",
                  n_fis_qc))
+
+  # The signed-off D4/E5 temporal-order rule is applied upstream in the
+  # cleaning script: a shock on the day of death (or later) is unexposed.
+  # Do not introduce a second recoding convention here; fail loudly if a
+  # pre-cleaned input would otherwise let tmerge count such a shock as prior.
+  n_fis_not_prior <- dt[Status_FIS == 1L &
+                          !is.na(Time_FIS_days) &
+                          Time_FIS_days >= Time_death_days, .N]
+  if (n_fis_not_prior > 0)
+    stop(sprintf(
+      "QC failure: %d exposed patients have Time_FIS_days >= Time_death_days; apply the D4/E5 cleaning rule before the mortality model",
+      n_fis_not_prior
+    ))
   
   # data1: ID + outcome time/status + baseline covariates
   base_cols <- c("ID", "Time_death_days", "Status_death", vars_base)
