@@ -1354,7 +1354,7 @@ run_mice <- function(df, label, seed = 123){
               
               method = grd$meth, predictorMatrix = grd$pred,
               
-              printFlag = TRUE)
+              printFlag = FALSE)
   
   
   

@@ -309,13 +309,19 @@ study1_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
 
   pdf_errors <- character(0)
   for (device_name in names(pdf_devices)) {
+    opened_device <- NA_integer_
     ok <- tryCatch(
       {
-        before_device <- grDevices::dev.cur()
         pdf_devices[[device_name]](pdf_file, width = pdf_width, height = pdf_height)
+        opened_device <- grDevices::dev.cur()
         tryCatch(
           draw(),
-          finally = grDevices::dev.off()
+          finally = {
+            if (!is.na(opened_device) && opened_device > 1L &&
+                grDevices::dev.cur() == opened_device) {
+              grDevices::dev.off()
+            }
+          }
         )
         if (!study1_file_ready(pdf_file)) {
           stop(sprintf("device completed but did not create a non-empty file: %s", pdf_file),
@@ -324,7 +330,8 @@ study1_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
         TRUE
       },
       error = function(e) {
-        if (exists("before_device") && grDevices::dev.cur() != before_device) {
+        if (!is.na(opened_device) && opened_device > 1L &&
+            grDevices::dev.cur() == opened_device) {
           grDevices::dev.off()
         }
         pdf_errors <<- c(pdf_errors, sprintf("%s: %s", device_name, conditionMessage(e)))
@@ -390,12 +397,19 @@ study1_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
 
   png_errors <- character(0)
   for (device_name in names(png_devices)) {
+    opened_device <- NA_integer_
     ok <- tryCatch(
       {
         png_devices[[device_name]](png_file)
+        opened_device <- grDevices::dev.cur()
         tryCatch(
           draw(),
-          finally = grDevices::dev.off()
+          finally = {
+            if (!is.na(opened_device) && opened_device > 1L &&
+                grDevices::dev.cur() == opened_device) {
+              grDevices::dev.off()
+            }
+          }
         )
         if (!study1_file_ready(png_file)) {
           stop(sprintf("device completed but did not create a non-empty file: %s", png_file),
@@ -404,7 +418,10 @@ study1_save_grid <- function(draw, png_file, pdf_file, png_width, png_height,
         TRUE
       },
       error = function(e) {
-        if (grDevices::dev.cur() > 1) grDevices::dev.off()
+        if (!is.na(opened_device) && opened_device > 1L &&
+            grDevices::dev.cur() == opened_device) {
+          grDevices::dev.off()
+        }
         png_errors <<- c(png_errors, sprintf("%s: %s", device_name, conditionMessage(e)))
         FALSE
       }
