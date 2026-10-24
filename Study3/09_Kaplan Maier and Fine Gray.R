@@ -195,8 +195,8 @@ study3_draw_km_ci <- function(curve_data, x_limit, col,
 
 study3_figure1_label <- function(labels) {
   display_labels <- labels
-  display_labels[grepl("single", labels, ignore.case = TRUE)] <- "Single Lead Device"
-  display_labels[grepl("dual|double", labels, ignore.case = TRUE)] <- "Double Lead Device"
+  display_labels[grepl("single", labels, ignore.case = TRUE)] <- "single-chamber ICD"
+  display_labels[grepl("dual|double", labels, ignore.case = TRUE)] <- "dual-chamber ICD"
   display_labels
 }
 
@@ -220,7 +220,7 @@ study3_figure1_cox_annotation <- function(fit) {
   }
 
   sprintf(
-    "Unadjusted Cox HR (Single vs Double)\nHR %.2f (95%% CI %.2f-%.2f), p = %s",
+    "Unadjusted Cox HR (Single- vs. Dual chamber)\nHR %.2f (95%% CI %.2f-%.2f), p = %s",
     fit_summary$coef[term_idx, "exp(coef)"],
     fit_summary$conf.int[term_idx, "lower .95"],
     fit_summary$conf.int[term_idx, "upper .95"],
