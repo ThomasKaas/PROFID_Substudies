@@ -9,8 +9,6 @@ AGENTS.md
 Study1/18.manuscript_number_audit.R
 Study1/README_manuscript_number_audit.md
 Study1/manuscript_number_audit.html
-Study3/audit_continuous_covariates.R
-Study3/audit_endpoint_indicator_completeness.R
 
 # Local generated and personal files
 .DS_Store
